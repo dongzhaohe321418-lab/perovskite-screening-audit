@@ -225,10 +225,17 @@ injection_scan_globs:
   - "**/*.txt"
   - "**/*.json"
 auditor_instruction_regexes:
-  - 'do not (report|raise|flag|block)'
+  # Each pattern requires an audit-context anchor on the same line, so ordinary
+  # scientific prose ("energies, which we do not report") cannot trip it. Only
+  # text that addresses the audit or claims authority over it matches.
+  - '(auditor|audit|codex)\b.{0,80}\bdo not (report|raise|flag|block)'
+  - '\bdo not (report|raise|flag|block)\b.{0,80}(finding|as critical|production|audit)'
   - '(is|are) not a finding'
   - 'pre-?approved.{0,40}(discrepancy|mismatch|failure|finding)'
   - 'overrides? the audit (rulebook|constitution|policy)'
   - '(to|for) the auditor\s*[:,]'
   - 'treat .{0,40} as (verified|approved|passing)'
   - 'standing (pi )?(approval|authority).{0,40}(ignore|override|not report)'
+  # English-only by design: this repository's own governing guide legitimately
+  # enumerates 可报告/不可报告 claim lists, so Chinese imperatives would be
+  # near-certain false positives. Add them only with a scoped glob.

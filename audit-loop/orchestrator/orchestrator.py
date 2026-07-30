@@ -75,10 +75,21 @@ class Orchestrator:
         self.worktrees_dir = self.state_dir / "worktrees"
         self.pending_dir = self.state_dir / "pending_reviews"
         self.logs_dir = self.state_dir / "logs"
+        # Every audit read resolves here, never in the live science repo, so the
+        # loop cannot disturb whatever Claude Science is doing in its checkout.
+        self.science_git = self.state_dir / "science-mirror.git"
         for d in (self.spool, self.processed_dir, self.cycles_dir, self.worktrees_dir,
                   self.pending_dir, self.logs_dir, self.state_dir / "controller"):
             d.mkdir(parents=True, exist_ok=True)
         self._client = None
+        self._ensure_mirror()
+
+    def _ensure_mirror(self) -> None:
+        if (self.science_git / "HEAD").exists():
+            return
+        self.science_git.parent.mkdir(parents=True, exist_ok=True)
+        sh(["git", "init", "--bare", "--quiet", str(self.science_git)])
+        log(f"created audit mirror {self.science_git}")
 
     # ---------- controller (in-process) ----------
 
@@ -98,7 +109,7 @@ class Orchestrator:
             return self._client
         secrets = self._load_secrets()
         os.environ.update(secrets)
-        os.environ["SCIENCE_REPO_PATH"] = str(self.science_repo)
+        os.environ["SCIENCE_REPO_PATH"] = str(self.science_git)
         os.environ["AUDIT_REPO_PATH"] = str(self.audit_repo)
         os.environ["PROJECT_CONFIG_PATH"] = str(self.loop_root / "orchestrator" / "projects.yaml")
         os.environ["CONTROLLER_STATE_PATH"] = str(self.state_dir / "controller" / "state.json")
@@ -167,7 +178,7 @@ class Orchestrator:
             except BlockingIOError:
                 log("another orchestrator pass holds the lock; exiting")
                 return
-            self._sync_science_from_origin()
+            self._sync_science_mirror()
             for event_path in sorted(self.spool.glob("evt-*.json")):
                 try:
                     event = json.loads(event_path.read_text(encoding="utf-8"))
@@ -188,55 +199,89 @@ class Orchestrator:
                     self._archive_event(event_path)
             self.scan_escalations()
 
-    def _sync_science_from_origin(self) -> None:
-        """GitHub is the source of truth for the science repo: fast-forward the
-        local clone when the remote is strictly ahead and enqueue an audit for
-        the new head. Never merges, never touches a dirty tree — on divergence
-        or dirt it notifies the PI and leaves the repo alone."""
-        if not self.cfg.get("sync", {}).get("science_fetch", True):
-            return
+    def _sync_science_mirror(self) -> None:
+        """Refresh the audit mirror. The live science repo is never written to.
+
+        All audit reads (worktrees, cat-file, diffs, ancestry) resolve in
+        `state/science-mirror.git`, so the loop cannot move files, take the index
+        lock, or leave worktree metadata in the repository Claude Science is
+        working in. Fetching *from* the live repo is a read on that side.
+
+        The mirror tracks two candidate tips — the live clone's branch and
+        origin's — and fast-forwards its own branch to whichever is a descendant.
+        Divergence is reported, never reconciled.
+        """
         branch = self.project["science_branch"]
-        has_origin = subprocess.run(["git", "remote", "get-url", "origin"],
-                                    cwd=self.science_repo, capture_output=True).returncode == 0
-        if not has_origin:
-            return
-        fetched = subprocess.run(["git", "fetch", "origin", branch],
-                                 cwd=self.science_repo, capture_output=True, timeout=120)
+        mirror = self.science_git
+        local_ref = f"refs/mirror/local/{branch}"
+        origin_ref = f"refs/mirror/origin/{branch}"
+
+        fetched = subprocess.run(
+            ["git", "fetch", "--quiet", "--no-tags", str(self.science_repo),
+             f"+refs/heads/{branch}:{local_ref}"],
+            cwd=mirror, capture_output=True, timeout=300)
         if fetched.returncode != 0:
-            log(f"science fetch failed (offline?): {fetched.stderr.decode()[-120:]}")
+            log(f"mirror fetch from live repo failed: {fetched.stderr.decode()[-160:]}")
             return
-        local = sh(["git", "rev-parse", f"refs/heads/{branch}"], cwd=self.science_repo).stdout.strip()
-        remote = sh(["git", "rev-parse", f"refs/remotes/origin/{branch}"],
-                    cwd=self.science_repo).stdout.strip()
-        if local == remote:
+
+        # sync.science_fetch governs whether GitHub is consulted at all; the fetch
+        # from the live clone above is unconditional, since that is how the mirror
+        # learns about commits Claude Science has not pushed yet.
+        if self.cfg.get("sync", {}).get("science_fetch", True) and subprocess.run(
+                ["git", "remote", "get-url", "origin"], cwd=self.science_repo,
+                capture_output=True).returncode == 0:
+            url = sh(["git", "remote", "get-url", "origin"], cwd=self.science_repo).stdout.strip()
+            remote_fetch = subprocess.run(
+                ["git", "fetch", "--quiet", "--no-tags", url,
+                 f"+refs/heads/{branch}:{origin_ref}"],
+                cwd=mirror, capture_output=True, timeout=300)
+            if remote_fetch.returncode != 0:
+                log(f"mirror fetch from origin failed (offline?): "
+                    f"{remote_fetch.stderr.decode()[-120:]}")
+
+        def tip(ref: str) -> str:
+            out = subprocess.run(["git", "rev-parse", "--verify", "--quiet", ref],
+                                 cwd=mirror, capture_output=True, text=True)
+            return out.stdout.strip()
+
+        local_tip, origin_tip = tip(local_ref), tip(origin_ref)
+        candidates = [t for t in (local_tip, origin_tip) if t]
+        if not candidates:
             return
-        local_behind = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", local, remote],
-            cwd=self.science_repo, capture_output=True).returncode == 0
-        if not local_behind:
-            remote_behind = subprocess.run(
-                ["git", "merge-base", "--is-ancestor", remote, local],
-                cwd=self.science_repo, capture_output=True).returncode == 0
-            if not remote_behind:
-                self.notify("Audit Loop: science repo diverged",
-                            f"local {local[:12]} and origin/{branch} {remote[:12]} have diverged "
-                            "— PI must reconcile; loop will not touch the repo")
+        head = candidates[0]
+        if local_tip and origin_tip and local_tip != origin_tip:
+            local_first = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", local_tip, origin_tip],
+                cwd=mirror, capture_output=True).returncode == 0
+            origin_first = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", origin_tip, local_tip],
+                cwd=mirror, capture_output=True).returncode == 0
+            if local_first:
+                head = origin_tip
+                log(f"origin/{branch} is ahead of the local clone; auditing {head[:12]} "
+                    "from the mirror (the live repo is left alone)")
+            elif origin_first:
+                head = local_tip
+            else:
+                self.notify("Audit Loop: science history diverged",
+                            f"local {local_tip[:12]} and origin {origin_tip[:12]} have diverged "
+                            "— PI must reconcile; the loop will not touch either repo")
+                return
+
+        current = tip(f"refs/heads/{branch}")
+        if current == head:
             return
-        dirty = sh(["git", "status", "--porcelain"], cwd=self.science_repo).stdout.strip()
-        if dirty:
-            self.notify("Audit Loop: sync blocked",
-                        f"origin/{branch} is ahead but the local tree is dirty; not syncing")
+        if current and subprocess.run(["git", "merge-base", "--is-ancestor", current, head],
+                                      cwd=mirror, capture_output=True).returncode != 0:
+            self.notify("Audit Loop: mirror cannot fast-forward",
+                        f"mirror {current[:12]} is not an ancestor of {head[:12]}")
             return
-        merged = subprocess.run(["git", "merge", "--ff-only", f"origin/{branch}"],
-                                cwd=self.science_repo, capture_output=True)
-        if merged.returncode != 0:
-            self.notify("Audit Loop: sync failed",
-                        f"fast-forward to origin/{branch} failed: {merged.stderr.decode()[-120:]}")
-            return
-        log(f"science repo fast-forwarded to origin/{branch} {remote[:12]}")
+        sh(["git", "update-ref", f"refs/heads/{branch}", head], cwd=mirror)
+        log(f"mirror {branch} advanced to {head[:12]}")
         stamp = dt.datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        event = {"type": "science_commit", "sha": remote, "source": "origin-sync", "ts": stamp}
-        (self.spool / f"evt-{stamp}-sync-{remote[:12]}.json").write_text(json.dumps(event))
+        (self.spool / f"evt-{stamp}-mirror-{head[:12]}.json").write_text(
+            json.dumps({"type": "science_commit", "sha": head,
+                        "source": "mirror-sync", "ts": stamp}))
 
     def _archive_event(self, event_path: Path, suffix: str = "") -> None:
         target = self.processed_dir / (event_path.name + suffix)
@@ -276,13 +321,18 @@ class Orchestrator:
         if len(sha) != 40:
             raise RuntimeError(f"not a full commit sha: {sha}")
         branch = self.project["science_branch"]
-        sh(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=self.science_repo)
+        present = subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"],
+                                 cwd=self.science_git, capture_output=True).returncode == 0
+        if not present:
+            log(f"{sha[:12]} not in the mirror yet; refreshing")
+            self._sync_science_mirror()
+            sh(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=self.science_git)
         on_branch = subprocess.run(
             ["git", "merge-base", "--is-ancestor", sha, f"refs/heads/{branch}"],
-            cwd=self.science_repo, capture_output=True,
+            cwd=self.science_git, capture_output=True,
         ).returncode == 0
         if not on_branch:
-            log(f"{sha[:12]} is not on {branch}; ignoring")
+            log(f"{sha[:12]} is not on {branch} in the mirror; ignoring")
             return False
         if self._rate_limited():
             return True
@@ -292,7 +342,7 @@ class Orchestrator:
             return True
 
         parents = sh(["git", "rev-list", "--parents", "-n", "1", sha],
-                     cwd=self.science_repo).stdout.split()
+                     cwd=self.science_git).stdout.split()
         before = parents[1] if len(parents) > 1 else "0" * 40
 
         response = self._post_webhook(
@@ -458,13 +508,13 @@ class Orchestrator:
     def _make_worktree(self, worktree: Path, sha: str) -> None:
         if worktree.exists():
             self._remove_worktree(worktree)
-        sh(["git", "worktree", "add", "--detach", str(worktree), sha], cwd=self.science_repo)
+        sh(["git", "worktree", "add", "--detach", str(worktree), sha], cwd=self.science_git)
 
     def _remove_worktree(self, worktree: Path) -> None:
         if worktree.exists():
             subprocess.run(["git", "worktree", "remove", "--force", str(worktree)],
-                           cwd=self.science_repo, capture_output=True, check=False)
-        subprocess.run(["git", "worktree", "prune"], cwd=self.science_repo,
+                           cwd=self.science_git, capture_output=True, check=False)
+        subprocess.run(["git", "worktree", "prune"], cwd=self.science_git,
                        capture_output=True, check=False)
 
     def _assert_worktree_clean(self, worktree: Path, sha: str) -> None:
@@ -486,7 +536,7 @@ class Orchestrator:
         result = sh([
             self.venv_python, str(checks / "deterministic_checks.py"),
             "--science-worktree", str(worktree),
-            "--science-git-dir", str(self.science_repo / ".git"),
+            "--science-git-dir", str(self.science_git),
             "--audited-commit", sha,
             "--base-commit", base,
             "--config", str(checks / "checks.yaml"),
@@ -795,6 +845,13 @@ class Orchestrator:
             add(label, head.returncode == 0,
                 f"{branch}@{head.stdout.strip() or '?'}"
                 + (f", {len(dirty.splitlines())} uncommitted file(s)" if dirty else ", clean"))
+
+        mirror_head = subprocess.run(
+            ["git", "rev-parse", "--short", f"refs/heads/{self.project['science_branch']}"],
+            cwd=self.science_git, capture_output=True, text=True)
+        add("audit mirror", mirror_head.returncode == 0,
+            f"{self.science_git.name} @ {mirror_head.stdout.strip() or 'empty'}"
+            " (all audit reads; live repo never written)")
 
         hook = Path(subprocess.run(["git", "rev-parse", "--absolute-git-dir"],
                                    cwd=self.science_repo, capture_output=True,
