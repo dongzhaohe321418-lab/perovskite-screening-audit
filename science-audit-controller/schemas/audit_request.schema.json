@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["project_id", "audit_scope", "evidence_manifest_sha256"],
+  "properties": {
+    "project_id": {"type": "string", "minLength": 1},
+    "audit_scope": {"type": "string", "minLength": 1},
+    "evidence_manifest_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "evidence_manifest": {"type": "object"},
+    "evidence_manifest_path": {
+      "type": "string",
+      "pattern": "^\\.audit/[A-Za-z0-9._/-]+\\.json$"
+    },
+    "requested_by": {"type": "string"},
+    "notes": {"type": "string"}
+  },
+  "not": {
+    "required": ["evidence_manifest", "evidence_manifest_path"]
+  },
+  "additionalProperties": false
+}

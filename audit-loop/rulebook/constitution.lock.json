@@ -1,0 +1,8 @@
+{
+  "constitution": "CODEX_AUDIT_WORKFLOW.md",
+  "version": "1.1",
+  "sha256": "0dbdc5579f414453dc65c864764798c51bbbe2ebd46ae1d29c96a4e52f3dad00",
+  "authority": "supreme",
+  "imported_at": "2026-07-30T08:28:27.105682+00:00",
+  "note": "Verbatim copy of the PI-supplied audit constitution. AUDIT_RULEBOOK.md is a subordinate machine-parseable citation index; on conflict this file wins."
+}

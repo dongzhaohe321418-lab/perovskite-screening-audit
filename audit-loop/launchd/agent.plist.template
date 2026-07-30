@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Generated from launchd/agent.plist.template by install.sh. Placeholders
+     __LABEL__ __PYTHON__ __ORCHESTRATOR__ __SPOOL__ __ROOT__ __PATH__ __HOME__
+     are substituted with this installation's real values. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__LABEL__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>__ORCHESTRATOR__</string>
+    <string>process</string>
+  </array>
+  <key>WatchPaths</key>
+  <array>
+    <string>__SPOOL__</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>900</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>15</integer>
+  <key>StandardOutPath</key>
+  <string>__ROOT__/state/logs/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__ROOT__/state/logs/launchd.err.log</string>
+  <key>WorkingDirectory</key>
+  <string>__ROOT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+  </dict>
+</dict>
+</plist>

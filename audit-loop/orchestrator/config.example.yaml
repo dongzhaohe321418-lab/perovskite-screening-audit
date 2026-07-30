@@ -1,0 +1,42 @@
+# Template for orchestrator/config.yaml. install.sh generates the real file from
+# this one, substituting __PLACEHOLDERS__ with paths discovered at install time,
+# so nothing here is machine-specific. Edit this template, not the generated file.
+
+paths:
+  science_repo: __SCIENCE_REPO__
+  audit_repo: __AUDIT_REPO__
+  controller_root: __CONTROLLER_ROOT__
+  audit_loop_root: __ROOT__
+  state_dir: __ROOT__/state
+  venv_python: __ROOT__/.venv/bin/python
+  secrets_env: __ROOT__/state/secrets.env
+
+project:
+  project_id: __PROJECT_ID__
+  science_branch: __SCIENCE_BRANCH__
+  audit_branch: __AUDIT_BRANCH__
+  science_repo_full_name: __SCIENCE_FULL_NAME__
+  audit_repo_full_name: __AUDIT_FULL_NAME__
+
+codex:
+  command: __CODEX__
+  # Constitution 1.2: Codex audits read-only; workspace-write confines writes
+  # to the cycle directory (the science worktree lives outside it).
+  args: ["exec", "--skip-git-repo-check", "--sandbox", "workspace-write", "--color", "never"]
+  timeout_seconds: 5400
+  max_retries: 1
+
+sync:
+  # GitHub is the source of truth for the science repo: fast-forward-only pulls
+  # (divergence notifies the PI instead), and audit artifacts push after FINAL.
+  science_fetch: true
+  audit_push: true
+
+limits:
+  # Constitution 3.4: anti-infinite-loop rails.
+  max_cycles_per_hour: 4
+  escalate_after_unresolved_cycles: 3
+
+notifications:
+  macos: true
+  log_file: notifications.log

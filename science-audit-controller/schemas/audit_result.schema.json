@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["cycle_id", "audited_commit", "decision", "findings"],
+  "properties": {
+    "cycle_id": {"type": "string", "pattern": "^CYCLE-[0-9]{6}$"},
+    "audited_commit": {"type": "string", "pattern": "^[a-fA-F0-9]{40}$"},
+    "decision": {
+      "type": "string",
+      "enum": ["PASS", "PASS_WITH_CAVEATS", "BLOCK", "NOT_VERIFIABLE"]
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "title", "severity", "status"],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^F-[A-Za-z0-9._-]+$"},
+          "title": {"type": "string", "minLength": 1},
+          "severity": {
+            "type": "string",
+            "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+          },
+          "status": {"const": "OPEN"},
+          "blocked_scopes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
+          "evidence": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "verified_closed_findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "verification_summary"],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^F-[A-Za-z0-9._-]+$"},
+          "verification_summary": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "summary": {"type": "string"}
+  },
+  "additionalProperties": false
+}

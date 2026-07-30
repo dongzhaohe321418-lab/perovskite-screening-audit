@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["cycle_id", "audited_commit", "runner", "started_at", "completed_at"],
+  "properties": {
+    "cycle_id": {"type": "string", "pattern": "^CYCLE-[0-9]{6}$"},
+    "audited_commit": {"type": "string", "pattern": "^[a-fA-F0-9]{40}$"},
+    "runner": {"type": "string", "minLength": 1},
+    "runner_version": {"type": "string"},
+    "prompt_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "completed_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

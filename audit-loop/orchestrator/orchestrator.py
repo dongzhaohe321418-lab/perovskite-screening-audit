@@ -1,0 +1,740 @@
+#!/usr/bin/env python3
+"""audit-loop orchestrator — the neutral scheduling layer of CODEX_AUDIT_WORKFLOW.md §3.5.
+
+It routes events and triggers tasks; it makes no scientific judgment and executes
+no production action. One pass processes the event spool and exits; launchd
+re-triggers it via WatchPaths on the spool directory.
+
+Per cycle it: fixes the science commit, runs the Tier-0 deterministic checks,
+runs Codex read-only against a detached worktree, commits the four audit
+artifacts to the Audit Repo under its own controller identity (Codex itself
+never pushes, constitution §1.2), drives the science-audit-controller in-process
+for validation/FINAL, and hands the FINAL report to Claude Science through the
+pending-review queue consumed by the local MCP server.
+
+Anti-infinite-loop rails (§3.4): idempotent cycle keys, a cycles-per-hour cap,
+and same-blocker-N-cycles escalation to the PI.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import fcntl
+import hashlib
+import hmac
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+UTC = dt.timezone.utc
+
+
+def now_iso() -> str:
+    return dt.datetime.now(UTC).isoformat()
+
+
+def log(msg: str) -> None:
+    print(f"[{now_iso()}] {msg}", flush=True)
+
+
+def sh(args: list[str], cwd: Path | None = None, check: bool = True,
+       timeout: int | None = None, input_text: str | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        args, cwd=cwd, check=check, capture_output=True, text=True,
+        timeout=timeout, input=input_text,
+    )
+
+
+class Orchestrator:
+    def __init__(self, config_path: Path, simulate_codex: bool = False):
+        self.config_path = config_path
+        self.cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        p = self.cfg["paths"]
+        # Anything omitted is derived from this file's location, so a clone runs
+        # anywhere without editing config.
+        default_root = Path(__file__).resolve().parent.parent
+        self.loop_root = Path(p.get("audit_loop_root") or default_root)
+        self.science_repo = Path(p["science_repo"])
+        self.audit_repo = Path(p["audit_repo"])
+        self.controller_root = Path(
+            p.get("controller_root") or self.loop_root.parent / "science-audit-controller")
+        self.state_dir = Path(p.get("state_dir") or self.loop_root / "state")
+        self.venv_python = p.get("venv_python") or str(self.loop_root / ".venv/bin/python")
+        self.secrets_env = Path(p.get("secrets_env") or self.state_dir / "secrets.env")
+        self.project = self.cfg["project"]
+        self.simulate_codex = simulate_codex
+        self.spool = self.state_dir / "spool"
+        self.processed_dir = self.spool / "processed"
+        self.cycles_dir = self.state_dir / "cycles"
+        self.worktrees_dir = self.state_dir / "worktrees"
+        self.pending_dir = self.state_dir / "pending_reviews"
+        self.logs_dir = self.state_dir / "logs"
+        for d in (self.spool, self.processed_dir, self.cycles_dir, self.worktrees_dir,
+                  self.pending_dir, self.logs_dir, self.state_dir / "controller"):
+            d.mkdir(parents=True, exist_ok=True)
+        self._client = None
+
+    # ---------- controller (in-process) ----------
+
+    def _load_secrets(self) -> dict[str, str]:
+        if not self.secrets_env.exists():
+            raise RuntimeError(f"secrets file missing: {self.secrets_env} — run install.sh first")
+        secrets: dict[str, str] = {}
+        for line in self.secrets_env.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                secrets[key.strip()] = value.strip()
+        return secrets
+
+    def client(self):
+        if self._client is not None:
+            return self._client
+        secrets = self._load_secrets()
+        os.environ.update(secrets)
+        os.environ["SCIENCE_REPO_PATH"] = str(self.science_repo)
+        os.environ["AUDIT_REPO_PATH"] = str(self.audit_repo)
+        os.environ["PROJECT_CONFIG_PATH"] = str(self.loop_root / "orchestrator" / "projects.yaml")
+        os.environ["CONTROLLER_STATE_PATH"] = str(self.state_dir / "controller" / "state.json")
+        sys.path.insert(0, str(self.controller_root))
+        from app.main import create_app
+        from fastapi.testclient import TestClient
+        self._client = TestClient(create_app(), raise_server_exceptions=False)
+        return self._client
+
+    def _post_webhook(self, repo_full_name: str, ref: str, before: str, after: str,
+                      delivery_suffix: str) -> dict[str, Any]:
+        secret = self._load_secrets()["GITHUB_WEBHOOK_SECRET"]
+        payload = {
+            "ref": ref,
+            "before": before,
+            "after": after,
+            "deleted": False,
+            "repository": {"full_name": repo_full_name},
+        }
+        body = json.dumps(payload).encode("utf-8")
+        signature = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+        response = self.client().post(
+            "/webhooks/github",
+            content=body,
+            headers={
+                "X-GitHub-Event": "push",
+                "X-GitHub-Delivery": f"local-{after[:12]}-{delivery_suffix}",
+                "X-Hub-Signature-256": signature,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            data = response.json()
+        except Exception:
+            data = {"detail": response.text}
+        data["_http_status"] = response.status_code
+        return data
+
+    def controller_state(self) -> dict[str, Any]:
+        path = self.state_dir / "controller" / "state.json"
+        if not path.exists():
+            return {}
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    # ---------- notifications ----------
+
+    def notify(self, title: str, message: str) -> None:
+        line = f"{now_iso()}\t{title}\t{message}\n"
+        with (self.logs_dir / self.cfg["notifications"].get("log_file", "notifications.log")).open("a") as fh:
+            fh.write(line)
+        log(f"NOTIFY: {title}: {message}")
+        if self.cfg["notifications"].get("macos", False):
+            script = 'display notification "{}" with title "{}"'.format(
+                message.replace("\\", "\\\\").replace('"', '\\"')[:180],
+                title.replace("\\", "\\\\").replace('"', '\\"')[:60],
+            )
+            subprocess.run(["osascript", "-e", script], capture_output=True, check=False)
+
+    # ---------- event processing ----------
+
+    def run_pass(self) -> None:
+        lock_path = self.state_dir / "orchestrator.lock"
+        with lock_path.open("w") as lock_fh:
+            try:
+                fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                log("another orchestrator pass holds the lock; exiting")
+                return
+            self._sync_science_from_origin()
+            for event_path in sorted(self.spool.glob("evt-*.json")):
+                try:
+                    event = json.loads(event_path.read_text(encoding="utf-8"))
+                except Exception as exc:
+                    log(f"unreadable event {event_path.name}: {exc}")
+                    self._archive_event(event_path)
+                    continue
+                try:
+                    deferred = self.handle_event(event)
+                except Exception as exc:
+                    log(f"event {event_path.name} failed: {type(exc).__name__}: {exc}")
+                    self.notify("Audit Loop error", f"{event_path.name}: {exc}")
+                    self._archive_event(event_path, suffix=".failed")
+                    continue
+                if deferred:
+                    log(f"event {event_path.name} deferred (rate limit); will retry on next pass")
+                else:
+                    self._archive_event(event_path)
+            self.scan_escalations()
+
+    def _sync_science_from_origin(self) -> None:
+        """GitHub is the source of truth for the science repo: fast-forward the
+        local clone when the remote is strictly ahead and enqueue an audit for
+        the new head. Never merges, never touches a dirty tree — on divergence
+        or dirt it notifies the PI and leaves the repo alone."""
+        if not self.cfg.get("sync", {}).get("science_fetch", True):
+            return
+        branch = self.project["science_branch"]
+        has_origin = subprocess.run(["git", "remote", "get-url", "origin"],
+                                    cwd=self.science_repo, capture_output=True).returncode == 0
+        if not has_origin:
+            return
+        fetched = subprocess.run(["git", "fetch", "origin", branch],
+                                 cwd=self.science_repo, capture_output=True, timeout=120)
+        if fetched.returncode != 0:
+            log(f"science fetch failed (offline?): {fetched.stderr.decode()[-120:]}")
+            return
+        local = sh(["git", "rev-parse", f"refs/heads/{branch}"], cwd=self.science_repo).stdout.strip()
+        remote = sh(["git", "rev-parse", f"refs/remotes/origin/{branch}"],
+                    cwd=self.science_repo).stdout.strip()
+        if local == remote:
+            return
+        local_behind = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", local, remote],
+            cwd=self.science_repo, capture_output=True).returncode == 0
+        if not local_behind:
+            remote_behind = subprocess.run(
+                ["git", "merge-base", "--is-ancestor", remote, local],
+                cwd=self.science_repo, capture_output=True).returncode == 0
+            if not remote_behind:
+                self.notify("Audit Loop: science repo diverged",
+                            f"local {local[:12]} and origin/{branch} {remote[:12]} have diverged "
+                            "— PI must reconcile; loop will not touch the repo")
+            return
+        dirty = sh(["git", "status", "--porcelain"], cwd=self.science_repo).stdout.strip()
+        if dirty:
+            self.notify("Audit Loop: sync blocked",
+                        f"origin/{branch} is ahead but the local tree is dirty; not syncing")
+            return
+        merged = subprocess.run(["git", "merge", "--ff-only", f"origin/{branch}"],
+                                cwd=self.science_repo, capture_output=True)
+        if merged.returncode != 0:
+            self.notify("Audit Loop: sync failed",
+                        f"fast-forward to origin/{branch} failed: {merged.stderr.decode()[-120:]}")
+            return
+        log(f"science repo fast-forwarded to origin/{branch} {remote[:12]}")
+        stamp = dt.datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        event = {"type": "science_commit", "sha": remote, "source": "origin-sync", "ts": stamp}
+        (self.spool / f"evt-{stamp}-sync-{remote[:12]}.json").write_text(json.dumps(event))
+
+    def _archive_event(self, event_path: Path, suffix: str = "") -> None:
+        target = self.processed_dir / (event_path.name + suffix)
+        try:
+            event_path.replace(target)
+        except OSError:
+            event_path.unlink(missing_ok=True)
+
+    def handle_event(self, event: dict[str, Any]) -> bool:
+        """Returns True when the event was deferred and must stay in the spool."""
+        etype = event.get("type")
+        if etype == "science_commit":
+            return self.handle_science_commit(event["sha"])
+        if etype == "disposition_recorded":
+            self.notify("Audit Loop", f"disposition recorded for {event.get('cycle_id')}; "
+                        "next commit starts the next cycle")
+            return False
+        log(f"ignoring unknown event type: {etype}")
+        return False
+
+    def _rate_limited(self) -> bool:
+        max_per_hour = int(self.cfg["limits"].get("max_cycles_per_hour", 4))
+        cycles = self.controller_state().get("cycles", {})
+        cutoff = dt.datetime.now(UTC) - dt.timedelta(hours=1)
+        recent = 0
+        for cycle in cycles.values():
+            try:
+                created = dt.datetime.fromisoformat(cycle.get("created_at", ""))
+            except ValueError:
+                continue
+            if created >= cutoff:
+                recent += 1
+        return recent >= max_per_hour
+
+    def handle_science_commit(self, sha: str) -> bool:
+        sha = sha.strip().lower()
+        if len(sha) != 40:
+            raise RuntimeError(f"not a full commit sha: {sha}")
+        branch = self.project["science_branch"]
+        sh(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=self.science_repo)
+        on_branch = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", sha, f"refs/heads/{branch}"],
+            cwd=self.science_repo, capture_output=True,
+        ).returncode == 0
+        if not on_branch:
+            log(f"{sha[:12]} is not on {branch}; ignoring")
+            return False
+        if self._rate_limited():
+            return True
+
+        parents = sh(["git", "rev-list", "--parents", "-n", "1", sha],
+                     cwd=self.science_repo).stdout.split()
+        before = parents[1] if len(parents) > 1 else "0" * 40
+
+        response = self._post_webhook(
+            self.project["science_repo_full_name"], f"refs/heads/{branch}",
+            before, sha, delivery_suffix=f"sci-{dt.datetime.now(UTC).strftime('%H%M%S')}",
+        )
+        status = response.get("status")
+        if status == "duplicate_ignored":
+            cycle_id, cycle_status = self._cycle_for_commit(sha)
+            if cycle_id is None:
+                log(f"{sha[:12]} already delivered and no cycle exists; nothing to do")
+                return False
+        elif status != "cycle_processed":
+            raise RuntimeError(f"science webhook rejected: {response}")
+        else:
+            cycle_id = response["cycle_id"]
+            cycle_status = response["cycle_status"]
+        log(f"cycle {cycle_id} for {sha[:12]}: {cycle_status}")
+        if cycle_status == "AUDIT_REQUEST_INVALID":
+            self.notify("Audit Loop", f"{cycle_id}: .audit/audit_request.json invalid at "
+                        f"{sha[:12]} — cycle cannot start")
+            return False
+        if cycle_status == "FINAL":
+            log(f"{cycle_id} already FINAL; skipping")
+            return False
+        self.run_audit_cycle(cycle_id, sha)
+        return False
+
+    def _cycle_for_commit(self, sha: str) -> tuple[str | None, str | None]:
+        for cycle_id, cycle in sorted(self.controller_state().get("cycles", {}).items()):
+            if cycle.get("science_commit") == sha:
+                return cycle_id, cycle.get("status")
+        return None, None
+
+    # ---------- the audit cycle ----------
+
+    def run_audit_cycle(self, cycle_id: str, sha: str) -> None:
+        cycle_dir = self.cycles_dir / cycle_id
+        out_dir = cycle_dir / "out"
+        cycle_dir.mkdir(parents=True, exist_ok=True)
+        out_dir.mkdir(exist_ok=True)
+        worktree = self.worktrees_dir / cycle_id
+
+        self._stage_cycle_inputs(cycle_id, sha, cycle_dir)
+        try:
+            self._make_worktree(worktree, sha)
+            self._run_tier0(cycle_dir, worktree, sha)
+            attempt_errors: list[str] = []
+            max_retries = int(self.cfg["codex"].get("max_retries", 1))
+            for attempt in range(1 + max_retries):
+                self._run_codex(cycle_id, sha, cycle_dir, worktree, attempt_errors, attempt)
+                self._assert_worktree_clean(worktree, sha)
+                errors = self._light_validate(cycle_id, sha, out_dir)
+                if errors:
+                    attempt_errors = errors
+                    log(f"{cycle_id} artifact prevalidation failed (attempt {attempt}): {errors}")
+                    continue
+                final_errors = self._commit_and_finalize(cycle_id, out_dir)
+                if final_errors is None:
+                    self._emit_pending_review(cycle_id)
+                    return
+                attempt_errors = final_errors
+                log(f"{cycle_id} controller rejected artifacts (attempt {attempt}): {final_errors}")
+            self.notify("Audit Loop FAILED", f"{cycle_id}: audit artifacts invalid after retries; "
+                        "see cycle dir")
+            (cycle_dir / "FAILED").write_text(json.dumps(attempt_errors, indent=2))
+        finally:
+            self._remove_worktree(worktree)
+
+    def _stage_cycle_inputs(self, cycle_id: str, sha: str, cycle_dir: Path) -> None:
+        rulebook = self.loop_root / "rulebook"
+        for src in (rulebook / "CODEX_AUDIT_WORKFLOW.md", rulebook / "AUDIT_RULEBOOK.md"):
+            dst = cycle_dir / src.name
+            dst.unlink(missing_ok=True)
+            shutil.copyfile(src, dst)
+            dst.chmod(0o644)
+        schemas_dst = cycle_dir / "schemas"
+        schemas_dst.mkdir(exist_ok=True)
+        for schema in (self.controller_root / "schemas").glob("*.json"):
+            dst = schemas_dst / schema.name
+            dst.unlink(missing_ok=True)
+            shutil.copyfile(schema, dst)
+        constitution_sha = hashlib.sha256(
+            (cycle_dir / "CODEX_AUDIT_WORKFLOW.md").read_bytes()).hexdigest()
+        prior = self._prior_findings_context()
+        context = {
+            "cycle_id": cycle_id,
+            "audited_commit": sha,
+            "project_id": self.project["project_id"],
+            "constitution": {"file": "CODEX_AUDIT_WORKFLOW.md", "version": "1.1",
+                             "sha256": constitution_sha},
+            "rulebook_index": "AUDIT_RULEBOOK.md",
+            "worktree": str(self.worktrees_dir / cycle_id),
+            "tier0_report": "check_report.json",
+            "previous_cycles": prior,
+        }
+        (cycle_dir / "cycle_context.json").write_text(
+            json.dumps(context, indent=2, sort_keys=True), encoding="utf-8")
+
+    def _prior_findings_context(self) -> list[dict[str, Any]]:
+        state = self.controller_state()
+        out = []
+        for cycle in sorted(state.get("cycles", {}).values(), key=lambda c: c["cycle_id"]):
+            if cycle.get("status") != "FINAL":
+                continue
+            result = cycle.get("audit_result") or {}
+            out.append({
+                "cycle_id": cycle["cycle_id"],
+                "science_commit": cycle["science_commit"],
+                "decision": result.get("decision"),
+                "findings": [
+                    {"finding_id": f.get("finding_id"), "title": f.get("title"),
+                     "severity": f.get("severity")}
+                    for f in result.get("findings", [])
+                ],
+                "verified_closed": [c.get("finding_id")
+                                    for c in result.get("verified_closed_findings", [])],
+                "disposition": (state.get("dispositions", {}).get(cycle["cycle_id"], {}) or {}).get(
+                    "findings", []),
+            })
+        return out[-5:]
+
+    def _make_worktree(self, worktree: Path, sha: str) -> None:
+        if worktree.exists():
+            self._remove_worktree(worktree)
+        sh(["git", "worktree", "add", "--detach", str(worktree), sha], cwd=self.science_repo)
+
+    def _remove_worktree(self, worktree: Path) -> None:
+        if worktree.exists():
+            subprocess.run(["git", "worktree", "remove", "--force", str(worktree)],
+                           cwd=self.science_repo, capture_output=True, check=False)
+        subprocess.run(["git", "worktree", "prune"], cwd=self.science_repo,
+                       capture_output=True, check=False)
+
+    def _assert_worktree_clean(self, worktree: Path, sha: str) -> None:
+        status = sh(["git", "status", "--porcelain"], cwd=worktree).stdout.strip()
+        head = sh(["git", "rev-parse", "HEAD"], cwd=worktree).stdout.strip()
+        if status or head != sha:
+            self.notify("Audit Loop VIOLATION",
+                        "Codex modified the read-only worktree — audit run discarded")
+            raise RuntimeError(f"worktree not clean after codex run: status={status!r} head={head}")
+
+    def _run_tier0(self, cycle_dir: Path, worktree: Path, sha: str) -> None:
+        state = self.controller_state()
+        final_commits = sorted(
+            (c["science_commit"], c["cycle_id"])
+            for c in state.get("cycles", {}).values() if c.get("status") == "FINAL"
+        )
+        base = final_commits[-1][0] if final_commits else "NONE"
+        checks = self.loop_root / "checks"
+        result = sh([
+            self.venv_python, str(checks / "deterministic_checks.py"),
+            "--science-worktree", str(worktree),
+            "--science-git-dir", str(self.science_repo / ".git"),
+            "--audited-commit", sha,
+            "--base-commit", base,
+            "--config", str(checks / "checks.yaml"),
+            "--out", str(cycle_dir / "check_report.json"),
+        ], check=False, timeout=1800)
+        (cycle_dir / "tier0.log").write_text(result.stdout + result.stderr, encoding="utf-8")
+        if result.returncode != 0:
+            raise RuntimeError(f"tier-0 checks crashed: {result.stderr[-500:]}")
+        log(f"tier-0: {result.stdout.strip().splitlines()[-1] if result.stdout.strip() else 'done'}")
+
+    def _build_prompt(self, cycle_id: str, sha: str, cycle_dir: Path, worktree: Path,
+                      previous_errors: list[str]) -> str:
+        state = self.controller_state()
+        controller_prompt = state.get("codex_tasks", {}).get(cycle_id, "")
+        retry_block = ""
+        if previous_errors:
+            retry_block = (
+                "\n## RETRY — your previous artifacts were rejected by the controller\n\n"
+                "Fix EXACTLY these validation errors and regenerate all four artifacts:\n"
+                + "\n".join(f"- {e}" for e in previous_errors) + "\n"
+            )
+        return f"""你是本项目的独立科学审计者(constitution §1.2)。本目录是你唯一可写的工作区。
+
+## 必读文件(按顺序)
+1. ./CODEX_AUDIT_WORKFLOW.md — 审计宪法 v1.1,对你有完全约束力;先完整阅读 §0 强制启动指令。
+2. ./AUDIT_RULEBOOK.md — 机器可解析的规则引用索引(从属于宪法;finding 引用规则 ID 用)。
+3. ./check_report.json — Tier-0 确定性检查结果。这是机器真相:你不得与其中任何 PASS/FAIL 相矛盾;
+   报告其中的失败时必须引用对应 check_id;你的独立工作是发现脚本查不出的问题。
+4. ./cycle_context.json — 本轮 cycle_id、被审计 commit、既往 findings 与 disposition。
+
+## 审计对象
+只读 worktree:{worktree}
+固定 commit:{sha}
+禁止修改该 worktree 及原仓库的任何文件;需要运行测试时复制到本目录下的临时子目录再跑。
+宪法 §4.3 给出阅读顺序;§4.4 要求先列原子声明再逐条核验;高影响数字必须从原始数据独立复算。
+
+## 输出契约(全部写入 ./out/,恰好四个文件)
+- out/audit_report.md — 按宪法 §16 模板;必须包含一行 `Decision: PASS|PASS_WITH_CAVEATS|BLOCK|NOT_VERIFIABLE`
+  (机器读取该行,必须与 JSON 一致)。
+- out/audit_result.json — 符合 ./schemas/audit_result.schema.json。
+  cycle_id 必须是 "{cycle_id}",audited_commit 必须是 "{sha}"。
+  每个 finding:finding_id 形如 F-NNN(不得复用既往 cycle 已关闭的 ID;沿用未关闭 finding 的原 ID),
+  severity ∈ CRITICAL/HIGH/MEDIUM/LOW/INFO,status 恒为 "OPEN"。
+  severity 语义遵循宪法 §12:只有 CRITICAL/HIGH 是阻断级;MEDIUM/LOW/INFO 是非阻断意见。
+  decision=BLOCK 时每个 finding 必须带 blocked_scopes(从以下取值:submit_production_job,
+  stop_production_job, publish_claim, change_locked_protocol, exclude_scientific_data,
+  increase_budget, operate_instrument,或 "*");非 BLOCK 时任何 finding 不得带 blocked_scopes。
+  evidence 数组第一项必须是规则引用,格式 "cite: <宪法 Gate/节号> / <R-XXX-NNN 或 C-XXX-NNN>";
+  Tier-0 已覆盖的发现标 "source: DETERMINISTIC",你独立发现的标 "source: JUDGMENT"。
+  你独立发现的每个 HARD 级缺陷,evidence 中必须附一条可复现命令,并提议一个新的 C-* 检查
+  **可复现命令必须可移植:审计工件会公开发布。禁止出现本机绝对路径、worktree 路径、
+  $TMPDIR 或用户名;一律假定读者已 clone 该仓库并 checkout 被审计 commit,使用仓库相对路径。**
+  (宪法的反同源偏差棘轮:让该类缺陷下轮变成机器可查)。
+  对 cycle_context.json 中带 fix_commit 且 fix_commit == "{sha}" 的既往 finding:独立验证修复后
+  才可写入 verified_closed_findings(finding_id + 非空 verification_summary);验证不了就保持沉默。
+- out/codex_run_metadata.json — 符合 schema;cycle_id/audited_commit 同上;runner 写 "codex-cli";
+  started_at/completed_at 为真实 ISO-8601 UTC 时间。
+- out/report_manifest.json — 符合 schema;files 覆盖其余三个文件,sha256 为各文件原始字节的 SHA-256。
+
+## 纪律
+- 不修改 worktree、不 commit、不 push、不触碰远端任务(宪法 §1.2 绝对禁区)。
+- 报告先给结论再给过程;没有 blocker 不要制造问题,有 blocker 不要被通过项稀释(宪法 §16)。
+- 你的报告将由 Claude Science 逐条 disposition,PI 只在升级时介入——finding 必须自包含、可执行。
+
+## Controller 生成的本轮机器上下文
+{controller_prompt}
+{retry_block}"""
+
+    def _run_codex(self, cycle_id: str, sha: str, cycle_dir: Path, worktree: Path,
+                   previous_errors: list[str], attempt: int) -> None:
+        prompt = self._build_prompt(cycle_id, sha, cycle_dir, worktree, previous_errors)
+        (cycle_dir / f"prompt_attempt{attempt}.txt").write_text(prompt, encoding="utf-8")
+        out_dir = cycle_dir / "out"
+        for stale in out_dir.glob("*"):
+            stale.unlink()
+        if self.simulate_codex:
+            self._simulate_codex(cycle_id, sha, cycle_dir)
+            return
+        codex_cfg = self.cfg["codex"]
+        cmd = [codex_cfg["command"], *codex_cfg["args"], "-C", str(cycle_dir),
+               "--output-last-message", str(cycle_dir / f"codex_last_message_{attempt}.txt"), "-"]
+        log(f"{cycle_id}: running codex (attempt {attempt}) …")
+        result = subprocess.run(
+            cmd, input=prompt, text=True, capture_output=True,
+            timeout=int(codex_cfg.get("timeout_seconds", 5400)),
+        )
+        (cycle_dir / f"codex_run_{attempt}.log").write_text(
+            result.stdout[-200000:] + "\n--- STDERR ---\n" + result.stderr[-50000:],
+            encoding="utf-8")
+        if result.returncode != 0:
+            raise RuntimeError(f"codex exec exited {result.returncode}; see codex_run_{attempt}.log")
+
+    def _simulate_codex(self, cycle_id: str, sha: str, cycle_dir: Path) -> None:
+        out_dir = cycle_dir / "out"
+        check_report = json.loads((cycle_dir / "check_report.json").read_text(encoding="utf-8"))
+        hard_fails = [r["check_id"] for r in check_report.get("results", [])
+                      if r.get("class") == "HARD" and r.get("status") in {"FAIL", "ERROR"}]
+        findings = [{
+            "finding_id": "F-001",
+            "title": "SIMULATED finding for pipeline selftest",
+            "severity": "LOW",
+            "status": "OPEN",
+            "evidence": ["cite: Gate 2 / C-SIM-000", "source: DETERMINISTIC",
+                         f"tier0 hard fails: {hard_fails}"],
+        }]
+        result = {"cycle_id": cycle_id, "audited_commit": sha,
+                  "decision": "PASS_WITH_CAVEATS", "findings": findings,
+                  "summary": "SIMULATED audit produced by --simulate-codex; not a real audit."}
+        report = (f"## Audit decision: PASS WITH CAVEATS\n\nDecision: PASS_WITH_CAVEATS\n\n"
+                  f"Audited commit: {sha}\n\nSIMULATED report (pipeline selftest only; "
+                  f"tier0 hard fails: {hard_fails}).\n\n### Execution declaration\n"
+                  "- Codex repository changes: NONE\n- Codex remote/HPC/GPU/instrument actions: NONE\n")
+        metadata = {"cycle_id": cycle_id, "audited_commit": sha, "runner": "simulated-codex",
+                    "started_at": now_iso(), "completed_at": now_iso()}
+        (out_dir / "audit_report.md").write_text(report, encoding="utf-8")
+        (out_dir / "audit_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+        (out_dir / "codex_run_metadata.json").write_text(json.dumps(metadata, indent=2),
+                                                         encoding="utf-8")
+        manifest = {"cycle_id": cycle_id, "files": {
+            name: {"sha256": hashlib.sha256((out_dir / name).read_bytes()).hexdigest()}
+            for name in ("audit_report.md", "audit_result.json", "codex_run_metadata.json")
+        }}
+        (out_dir / "report_manifest.json").write_text(json.dumps(manifest, indent=2),
+                                                      encoding="utf-8")
+
+    def _light_validate(self, cycle_id: str, sha: str, out_dir: Path) -> list[str]:
+        errors: list[str] = []
+        required = ["audit_report.md", "audit_result.json", "codex_run_metadata.json",
+                    "report_manifest.json"]
+        for name in required:
+            if not (out_dir / name).exists():
+                errors.append(f"missing {name}")
+        if errors:
+            return errors
+        try:
+            result = json.loads((out_dir / "audit_result.json").read_text(encoding="utf-8"))
+            manifest = json.loads((out_dir / "report_manifest.json").read_text(encoding="utf-8"))
+            json.loads((out_dir / "codex_run_metadata.json").read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            return [f"artifact JSON parse error: {exc}"]
+        if result.get("cycle_id") != cycle_id:
+            errors.append(f"audit_result cycle_id {result.get('cycle_id')!r} != {cycle_id}")
+        if result.get("audited_commit") != sha:
+            errors.append("audit_result audited_commit does not match the fixed science commit")
+        report_text = (out_dir / "audit_report.md").read_text(encoding="utf-8")
+        import re
+        match = re.search(r"(?im)^\s*decision\s*:\s*([A-Z_]+)\s*$", report_text)
+        if not match:
+            errors.append("audit_report.md lacks a machine-readable 'Decision:' line")
+        elif match.group(1) != result.get("decision"):
+            errors.append("Decision line in markdown disagrees with audit_result.json")
+        for name, entry in (manifest.get("files") or {}).items():
+            path = out_dir / name
+            if not path.exists():
+                errors.append(f"report_manifest names missing file {name}")
+                continue
+            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            declared = entry.get("sha256") if isinstance(entry, dict) else entry
+            if not isinstance(declared, str) or declared.lower() != actual:
+                errors.append(f"report_manifest sha256 mismatch for {name}")
+        return errors
+
+    def _commit_and_finalize(self, cycle_id: str, out_dir: Path) -> list[str] | None:
+        """Commit artifacts to the Audit Repo and drive controller validation.
+
+        Returns None on FINAL, else the controller's error list (audit repo rolled back).
+        """
+        branch = self.project["audit_branch"]
+        before = sh(["git", "rev-parse", f"refs/heads/{branch}"], cwd=self.audit_repo).stdout.strip()
+        cycle_rel = Path("projects") / self.project["project_id"] / "cycles" / cycle_id
+        target = self.audit_repo / cycle_rel
+        target.mkdir(parents=True, exist_ok=True)
+        for name in ("audit_report.md", "audit_result.json", "codex_run_metadata.json",
+                     "report_manifest.json"):
+            shutil.copy2(out_dir / name, target / name)
+        sh(["git", "add", str(cycle_rel)], cwd=self.audit_repo)
+        sh(["git", "-c", "user.name=Audit Loop Controller", "-c", "user.email=audit-loop@local",
+            "commit", "-m", f"{cycle_id}: audit artifacts", "--", str(cycle_rel)],
+           cwd=self.audit_repo)
+        after = sh(["git", "rev-parse", "HEAD"], cwd=self.audit_repo).stdout.strip()
+        response = self._post_webhook(
+            self.project["audit_repo_full_name"], f"refs/heads/{branch}",
+            before, after, delivery_suffix=f"aud-{after[:6]}",
+        )
+        if response.get("status") == "audit_validated":
+            log(f"{cycle_id} FINAL at audit commit {after[:12]}")
+            self._push_audit_repo(branch)
+            return None
+        sh(["git", "reset", "--hard", before], cwd=self.audit_repo)
+        return [str(e) for e in response.get("errors", [])] or [str(response)]
+
+    def _push_audit_repo(self, branch: str) -> None:
+        if not self.cfg.get("sync", {}).get("audit_push", True):
+            return
+        has_origin = subprocess.run(["git", "remote", "get-url", "origin"],
+                                    cwd=self.audit_repo, capture_output=True).returncode == 0
+        if not has_origin:
+            return
+        pushed = subprocess.run(["git", "push", "origin", branch],
+                                cwd=self.audit_repo, capture_output=True, timeout=120)
+        if pushed.returncode != 0:
+            self.notify("Audit Loop: audit push failed",
+                        f"audit artifacts committed locally but push to origin failed: "
+                        f"{pushed.stderr.decode()[-120:]}")
+        else:
+            log(f"audit repo pushed to origin/{branch}")
+
+    # ---------- handoff to Claude Science ----------
+
+    def _emit_pending_review(self, cycle_id: str) -> None:
+        state = self.controller_state()
+        cycle = state.get("cycles", {}).get(cycle_id)
+        if not cycle:
+            raise RuntimeError(f"cycle {cycle_id} missing from controller state after FINAL")
+        result = cycle.get("audit_result") or {}
+        cycle_dir = self.cycles_dir / cycle_id
+        pending = {
+            "cycle_id": cycle_id,
+            "audit_report_id": cycle.get("audit_report_id"),
+            "report_sha256": cycle.get("audit_report_sha256"),
+            "science_commit": cycle.get("science_commit"),
+            "decision": result.get("decision"),
+            "finding_ids": [f.get("finding_id") for f in result.get("findings", [])],
+            "report_path": str(cycle_dir / "out" / "audit_report.md"),
+            "result_path": str(cycle_dir / "out" / "audit_result.json"),
+            "created_at": now_iso(),
+        }
+        tmp = self.pending_dir / f".{cycle_id}.tmp"
+        tmp.write_text(json.dumps(pending, indent=2), encoding="utf-8")
+        tmp.replace(self.pending_dir / f"{cycle_id}.json")
+        decision = result.get("decision")
+        n_findings = len(pending["finding_ids"])
+        self.notify("Audit Loop: report ready",
+                    f"{cycle_id} {decision} ({n_findings} findings) — awaiting Claude Science "
+                    "disposition via MCP")
+
+    # ---------- escalation (constitution 3.4) ----------
+
+    def scan_escalations(self) -> None:
+        state = self.controller_state()
+        events = state.get("event_log", [])
+        cycles = state.get("cycles", {})
+        final_order = [c["cycle_id"] for c in sorted(cycles.values(), key=lambda c: c["cycle_id"])
+                       if c.get("status") == "FINAL"]
+        opened: dict[str, str] = {}
+        closed: set[str] = set()
+        for event in events:
+            if event.get("event") == "FINDING_OPENED":
+                opened.setdefault(event["finding_id"], event.get("cycle_id") or "")
+            elif event.get("event") == "FINDING_VERIFIED_CLOSED":
+                closed.add(event["finding_id"])
+        threshold = int(self.cfg["limits"].get("escalate_after_unresolved_cycles", 3))
+        esc_path = self.state_dir / "escalations.json"
+        try:
+            esc = json.loads(esc_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            esc = {"escalations": []}
+        known = {e["finding_id"] for e in esc["escalations"]}
+        changed = False
+        for finding_id, opened_cycle in opened.items():
+            if finding_id in closed or finding_id in known or opened_cycle not in final_order:
+                continue
+            cycles_seen = final_order[final_order.index(opened_cycle):]
+            if len(cycles_seen) >= threshold:
+                esc["escalations"].append({
+                    "escalation_id": f"ESC-{len(esc['escalations']) + 1:04d}",
+                    "finding_id": finding_id,
+                    "cycle_ids": cycles_seen,
+                    "opened_at": now_iso(),
+                    "status": "OPEN",
+                })
+                changed = True
+                self.notify("Audit Loop: ESCALATE_TO_PI",
+                            f"finding {finding_id} unresolved across {len(cycles_seen)} audit "
+                            "cycles — PI decision required (constitution 3.4)")
+        if changed:
+            tmp = esc_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(esc, indent=2), encoding="utf-8")
+            tmp.replace(esc_path)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", default=str(Path(__file__).parent / "config.yaml"))
+    parser.add_argument("--simulate-codex", action="store_true",
+                        help="pipeline selftest: emit stub artifacts instead of running codex")
+    parser.add_argument("command", choices=["process"], help="process the event spool once")
+    args = parser.parse_args()
+    orch = Orchestrator(Path(args.config), simulate_codex=args.simulate_codex)
+    orch.run_pass()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

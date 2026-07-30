@@ -1,0 +1,17 @@
+projects:
+  - project_id: perovskite-screening
+    science_repo: perovskite-screening
+    science_repo_full_name: dongzhaohe321418-lab/perovskite-screening
+    science_branch: main
+    audit_repo: perovskite-screening-audit
+    audit_repo_full_name: dongzhaohe321418-lab/perovskite-screening-audit
+    audit_branch: audit
+    # Trusted root commit of the local Audit Repo audit branch.
+    audit_initial_commit: "b71a5a9c7b298388ea15b9ae9914a049628f3f68"
+    science_relevant_paths:
+      - .audit/audit_request.json
+      - data/
+      - results/
+      - reports/
+      - scripts/
+      - src/

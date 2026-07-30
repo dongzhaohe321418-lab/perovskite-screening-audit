@@ -1,0 +1,194 @@
+{
+  "rulebook_version": "1.0.0",
+  "rulebook_sha256": "86c911eb6b0730442d706f8a5567e50a70815958c4e6b4508573031512c6d512",
+  "generated_from": "AUDIT_RULEBOOK.md",
+  "rule_count": 31,
+  "rules": [
+    {
+      "rule_id": "R-CMP-001",
+      "class": "HARD",
+      "deterministic_check": "C-CMP-001",
+      "title": "Every comparison declares a shared comparability basis"
+    },
+    {
+      "rule_id": "R-CMP-002",
+      "class": "HARD",
+      "deterministic_check": "C-CMP-002",
+      "title": "Quantities the repository declares incomparable are never presented as a comparison"
+    },
+    {
+      "rule_id": "R-CMP-003",
+      "class": "HARD",
+      "deterministic_check": "C-CMP-003",
+      "title": "A statistic declares its population and the attributes its own pooling declaration makes load-bearing"
+    },
+    {
+      "rule_id": "R-COR-001",
+      "class": "HARD",
+      "deterministic_check": "C-SWEEP-001",
+      "title": "A retraction sweeps repo-wide, paraphrase included"
+    },
+    {
+      "rule_id": "R-COR-002",
+      "class": "HARD",
+      "deterministic_check": "C-SUPER-001",
+      "title": "The superseded record is preserved and marked, never overwritten"
+    },
+    {
+      "rule_id": "R-COR-003",
+      "class": "HARD",
+      "deterministic_check": "C-DERIVE-001",
+      "title": "Numbers derived from corrected inputs are recomputed, not carried across"
+    },
+    {
+      "rule_id": "R-COR-004",
+      "class": "HARD",
+      "deterministic_check": "C-SWEEP-002",
+      "title": "A correction is verified beyond the file it fixed, and a failed correction is a new defect"
+    },
+    {
+      "rule_id": "R-COR-005",
+      "class": "SOFT",
+      "deterministic_check": "none",
+      "title": "Retraction entries should record how the defect was found"
+    },
+    {
+      "rule_id": "R-EVD-001",
+      "class": "HARD",
+      "deterministic_check": "C-HASH-001",
+      "title": "Every cited hash resolves to a committed artifact"
+    },
+    {
+      "rule_id": "R-EVD-002",
+      "class": "HARD",
+      "deterministic_check": "C-PATH-001",
+      "title": "Every referenced locator exists at the audited commit"
+    },
+    {
+      "rule_id": "R-EVD-003",
+      "class": "HARD",
+      "deterministic_check": "C-NUM-001",
+      "title": "Every quoted number recomputes from the one artifact it cites"
+    },
+    {
+      "rule_id": "R-EVD-004",
+      "class": "HARD",
+      "deterministic_check": "C-FIELD-001",
+      "title": "An asserted property traces to a measurement recorded in the artifact"
+    },
+    {
+      "rule_id": "R-EVD-005",
+      "class": "HARD",
+      "deterministic_check": "C-JOIN-001",
+      "title": "Identities are joined by recorded key, never by inference"
+    },
+    {
+      "rule_id": "R-EVD-006",
+      "class": "HARD",
+      "deterministic_check": "C-RECOMP-001",
+      "title": "A reported result commits the inputs needed to recompute it"
+    },
+    {
+      "rule_id": "R-EVD-007",
+      "class": "HARD",
+      "deterministic_check": "none",
+      "title": "A derived constant cites the record of its inputs' residual"
+    },
+    {
+      "rule_id": "R-GRD-001",
+      "class": "HARD",
+      "deterministic_check": "C-GUARD-001",
+      "title": "A guard's verdict must be shown to track the condition it guards"
+    },
+    {
+      "rule_id": "R-GRD-002",
+      "class": "HARD",
+      "deterministic_check": "C-GUARD-002",
+      "title": "A tool's own failure is never reported as the subject's failure"
+    },
+    {
+      "rule_id": "R-GRD-003",
+      "class": "HARD",
+      "deterministic_check": "C-PIN-001",
+      "title": "A literal-string check must not become the reason stale text survives"
+    },
+    {
+      "rule_id": "R-GRD-004",
+      "class": "HARD",
+      "deterministic_check": "C-CHKID-001",
+      "title": "Every check declares the rule it enforces and the incident it pins"
+    },
+    {
+      "rule_id": "R-GRD-005",
+      "class": "SOFT",
+      "deterministic_check": "none",
+      "title": "Recommend a deterministic check for any defect class caught only by reading"
+    },
+    {
+      "rule_id": "R-NAV-001",
+      "class": "HARD",
+      "deterministic_check": "C-NAV-001",
+      "title": "The declared canonical index carries every current conclusion"
+    },
+    {
+      "rule_id": "R-NAV-002",
+      "class": "HARD",
+      "deterministic_check": "C-NAV-002",
+      "title": "An authoritative pointer never resolves to a superseded document"
+    },
+    {
+      "rule_id": "R-NAV-003",
+      "class": "HARD",
+      "deterministic_check": "C-NAV-003",
+      "title": "Self-declared counts and enumerations match reality"
+    },
+    {
+      "rule_id": "R-NAV-004",
+      "class": "SOFT",
+      "deterministic_check": "none",
+      "title": "A current conclusion should reach its raw evidence without passing through a superseded document"
+    },
+    {
+      "rule_id": "R-PRO-001",
+      "class": "HARD",
+      "deterministic_check": "C-PRO-001",
+      "title": "Two-step staging before irreversible or expensive action"
+    },
+    {
+      "rule_id": "R-PRO-002",
+      "class": "HARD",
+      "deterministic_check": "C-PRO-002",
+      "title": "A declared gate records per-condition evidence"
+    },
+    {
+      "rule_id": "R-PRO-003",
+      "class": "HARD",
+      "deterministic_check": "C-PRO-003",
+      "title": "The audit trail is append-only"
+    },
+    {
+      "rule_id": "R-PRO-004",
+      "class": "HARD",
+      "deterministic_check": "C-PRO-004",
+      "title": "No commit asserts a substantive event without a content change"
+    },
+    {
+      "rule_id": "R-STA-001",
+      "class": "HARD",
+      "deterministic_check": "C-STATUS-001",
+      "title": "\"Running\" requires a recorded preflight pass and real output"
+    },
+    {
+      "rule_id": "R-STA-002",
+      "class": "HARD",
+      "deterministic_check": "C-STATUS-002",
+      "title": "Status agrees across every document asserting it"
+    },
+    {
+      "rule_id": "R-STA-003",
+      "class": "HARD",
+      "deterministic_check": "C-TRACE-001",
+      "title": "No artifact asserts an event that left no trace"
+    }
+  ]
+}

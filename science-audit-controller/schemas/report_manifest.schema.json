@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["cycle_id", "files"],
+  "properties": {
+    "cycle_id": {"type": "string", "pattern": "^CYCLE-[0-9]{6}$"},
+    "files": {
+      "type": "object",
+      "minProperties": 3,
+      "propertyNames": {
+        "enum": [
+          "audit_request.json",
+          "evidence_manifest.json",
+          "audit_report.md",
+          "audit_result.json",
+          "codex_run_metadata.json"
+        ]
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": ["sha256"],
+        "properties": {
+          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

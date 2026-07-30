@@ -1,0 +1,234 @@
+# Tier-0 deterministic check configuration for the perovskite science repository.
+#
+# Consumed by deterministic_checks.py. Every domain-specific string (manifest key names,
+# banner wording, status vocabulary, test entrypoint) lives HERE, not in the script: the
+# script contains only mechanism. Editing this file changes `checks_sha256` in every
+# report, so a report can never be re-attributed to a different rule set.
+#
+# Globs are matched against repo-relative POSIX paths of files tracked at the audited
+# commit. `**/` means "zero or more directories", `*` never crosses `/`.
+schema: checks_config/v1
+
+# ----------------------------------------------------------------------------------------
+# C-HASH-001 / C-HASH-002 -- manifest hash and path resolution
+# ----------------------------------------------------------------------------------------
+
+# Every tracked JSON is treated as a potential manifest. Widening this is safe: a hash
+# that cannot be paired with a path field is counted and reported as "not judged", never
+# as a violation.
+manifest_globs:
+  - "**/*.json"
+
+# Fields whose string value is read as a repo path. Resolution tries the path relative to
+# the manifest's own directory first, then relative to the repo root; only when neither
+# exists is it a C-HASH-002 violation.
+manifest_path_keys:
+  - local_source      # ehpc/inputs_stage2/*/staging_manifest.json
+  - local_path        # results/objective2/paired_pilot/corpus108/input_manifest_24.json
+  - source_gz         # results/objective1/dft/charge_relaxed/q0/CONVERGENCE_SUMMARY.json
+  - geometry          # ehpc/inputs/MANIFEST_*.json
+  - file              # results/fa_host/pool_v3_harmonised/HOST_MANIFEST.json rows
+  - path
+  - source
+  - filename
+  - relpath
+  - evidence_manifest_path   # .audit/audit_request.json
+
+# Full 64-hex digest fields, used when they sit beside exactly one path field.
+manifest_hash_keys:
+  - sha256
+  - sha256_of_gz
+  - hash
+  - sha256_hex
+
+# Truncated digest fields: key -> number of leading hex digits to compare.
+manifest_truncated_hash_keys:
+  sha256_16: 16       # HOST_MANIFEST.json rows, return_test_v2.json rows
+
+manifest_size_keys:
+  - size_bytes
+  - bytes
+  - size
+
+# Prefixed-pair convention: a path field `X` is paired with `X<hash_suffix>` /
+# `X<size_suffix>` when present (e.g. geometry + geometry_sha256).
+manifest_hash_key_suffix: "_sha256"
+manifest_size_key_suffix: "_size_bytes"
+
+# Before applying the prefixed-pair convention, these suffixes are stripped from the path
+# field name to obtain the stem (evidence_manifest_path -> evidence_manifest_sha256).
+manifest_path_key_stem_suffixes:
+  - "_path"
+  - "_source"
+  - "_file"
+
+# Objects that map a path to its digest, rather than carrying sibling fields.
+manifest_path_keyed_map_keys:
+  - input_sha256      # ehpc/inputs_stage2/neb_q0_production/fingerprint_check.json
+  - inputs            # CONVERGENCE_SUMMARY.json
+  - structures        # CONVERGENCE_SUMMARY.json
+
+# Also auto-recognise a path-keyed map when EVERY key of an object looks like a path and
+# EVERY value is a 64-hex digest or an object carrying one (e.g. corpus108/HASHES.json,
+# whose document root is such a map). Deliberately strict so ordinary dictionaries with
+# non-path keys are never misread as manifests.
+manifest_path_keyed_map_autodetect: true
+
+# The shape a string must have to be read as a repo path -- applied both to candidate map
+# keys above and to the VALUE of every manifest_path_keys field. Values that fail it are
+# counted as "not judged" rather than reported: it is what keeps a citation string such as
+# `"source": "Eames et al. 2015"` (results/objective1/anchors_summary.json) from being
+# mistaken for a missing file.
+manifest_path_like_regex: '\A[\w./+-]+\.[A-Za-z0-9]{1,10}\Z'
+
+# ----------------------------------------------------------------------------------------
+# C-JSON-001 -- JSON parse + duplicate-key rejection
+# ----------------------------------------------------------------------------------------
+json_scan_globs:
+  - "**/*.json"
+
+# ----------------------------------------------------------------------------------------
+# C-COMMIT-001 -- empty commits carrying a substantive message
+# ----------------------------------------------------------------------------------------
+# Used only when --base-commit is NONE; otherwise the range base..audited is used.
+history_window: 60
+
+# A zero-file commit whose full message matches any of these is a deliberate marker, not a
+# lost change, and is not reported. Merge commits are never judged.
+allowed_empty_commit_patterns:
+  - '\A\s*(wip|checkpoint|empty|no-op|noop)\b'
+  - '\[(skip ci|ci skip|empty)\]'
+  - '\ballow-empty\b'
+  - '\A\s*(tag|release|annotate|trigger)\s*[:  ]'
+
+# ----------------------------------------------------------------------------------------
+# C-LINK-001 -- link and backticked-path resolution
+# ----------------------------------------------------------------------------------------
+link_scan_globs:
+  - "**/*.md"
+
+# Only references ending in one of these are treated as repo paths. Extensions produced
+# only on the cluster (.in, .out, .gz, .log, .txt) are deliberately excluded: those names
+# routinely refer to remote files that are not, and should not be, tracked here.
+link_extensions:
+  - ".md"
+  - ".json"
+  - ".py"
+  - ".csv"
+  - ".extxyz"
+  - ".cif"
+  - ".png"
+  - ".pdf"
+  - ".tex"
+  - ".yaml"
+  - ".yml"
+  - ".sbatch"
+
+# Targets matching any of these are not repo paths and are skipped.
+link_ignore_regexes:
+  - '\A[a-zA-Z][a-zA-Z0-9+.-]*://'   # http://, https://, ssh://, file://
+  - '\Amailto:'
+  - '\A#'                            # in-document anchors
+  - '\{\{'                           # {{artifact:...}} templating
+  - '\A/'                            # absolute paths
+  - '\A~'
+  - '\A[A-Za-z]:\\'
+  - '\d\.\.'                         # range shorthand, e.g. `m00..m17.extxyz` -- not a filename
+
+# ----------------------------------------------------------------------------------------
+# C-BANNER-001 -- superseded banner presence
+# ----------------------------------------------------------------------------------------
+# The repository's own convention (README.md: "every file carries a `SUPERSEDED` banner")
+# is a blockquoted H1 on the first lines of every archived document.
+superseded_globs:
+  - "archive/**/*.md"
+superseded_banner_regex: '^>\s*#\s*SUPERSEDED\b'
+banner_window_lines: 8
+
+# ----------------------------------------------------------------------------------------
+# C-STATE-001 -- cross-document status contradictions
+# ----------------------------------------------------------------------------------------
+# Generic shape (all fields required):
+#   - id:          stable identifier, appears verbatim in the violation message
+#     description: what the contradiction is, in one clause
+#     scope_globs: which tracked files participate
+#     asserts:     regexes whose match means "the repository states X"
+#     denies:      regexes whose match means "the repository states not-X"
+# A violation is raised when some line in scope matches an `asserts` regex and some other
+# line in scope matches a `denies` regex. The two lines may be in the same file. Patterns
+# should be verbatim-anchored phrases, not paraphrases: this check is HARD, so a loose
+# regex would manufacture an unappealable finding. Two illustrative entries follow; add
+# more as new status vocabulary appears.
+status_conflicts:
+  - id: SC-LAUNCH-STATE
+    description: >-
+      the production CI-NEB pair is recorded as submitted while the same body of documents
+      still states that launch has not been authorised
+    scope_globs:
+      - "*.md"
+      - "results/**/*.md"
+    asserts:
+      - 'both production CI-NEBs submitted'
+      - '\*\*LAUNCH RECORD\b'
+    denies:
+      - 'launch awaits explicit PI go'
+      - 'launch NOT (yet )?(given|authorised|authorized)'
+
+  - id: SC-GATE-CONDITIONS
+    description: >-
+      the q=0 NEB entry gate is recorded as fully passed while another current document
+      states that entry conditions remain open
+    scope_globs:
+      - "*.md"
+      - "results/**/*.md"
+    asserts:
+      - 'ALL FIVE CONDITIONS PASS'
+    denies:
+      - '(One|Two|Three|Four) of five entry conditions remain open'
+
+# ----------------------------------------------------------------------------------------
+# C-SCOPE-001 -- changed paths outside the declared audit scope
+# ----------------------------------------------------------------------------------------
+# The scope is read from the audited commit, not from the working tree. It is machine
+# checkable only when the field is a list of path globs (or a mapping with
+# `include_globs`); a prose scope statement yields SKIP rather than a guess.
+audit_request_path: ".audit/audit_request.json"
+audit_scope_field: "audit_scope"
+
+# ----------------------------------------------------------------------------------------
+# C-TEST-001 -- the repository's own declared test entrypoint
+# ----------------------------------------------------------------------------------------
+# Declared by the repo itself: README.md indexes scripts/20_test_checks.py as the
+# regression suite, and that script's docstring gives this exact invocation. It is run in
+# a pristine temporary clone at the audited commit, never in the supplied worktree.
+test_command: "python3 scripts/20_test_checks.py"
+
+# Disabled by default: the suite imports numpy and ase (see requirements.txt), so it only
+# means anything under an interpreter that has them. To enable, set this to true AND point
+# test_python at such an interpreter (verified working on this host, 2026-07-30):
+#   test_command_enabled: true
+#   test_python: "/path/to/env/bin/python3"   # e.g. a conda env with the repo's deps
+# With it false, C-TEST-001 reports SKIP and claims nothing about the suite either way.
+test_command_enabled: false
+test_python: null
+test_timeout_seconds: 900
+test_env:
+  MPLBACKEND: "Agg"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+# --- C-INJECT-001 -------------------------------------------------------------
+# Audited content is data, never instructions. A tracked file telling the auditor
+# to suppress or downgrade a finding is a process defect regardless of whether the
+# auditor complied. Pure pattern matching; add patterns as new phrasings appear.
+injection_scan_globs:
+  - "**/*.md"
+  - "**/*.txt"
+  - "**/*.json"
+auditor_instruction_regexes:
+  - 'do not (report|raise|flag|block)'
+  - '(is|are) not a finding'
+  - 'pre-?approved.{0,40}(discrepancy|mismatch|failure|finding)'
+  - 'overrides? the audit (rulebook|constitution|policy)'
+  - '(to|for) the auditor\s*[:,]'
+  - 'treat .{0,40} as (verified|approved|passing)'
+  - 'standing (pi )?(approval|authority).{0,40}(ignore|override|not report)'

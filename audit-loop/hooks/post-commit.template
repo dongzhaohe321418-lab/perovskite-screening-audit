@@ -1,0 +1,16 @@
+#!/bin/sh
+# audit-loop trigger: every commit on the science branch enqueues an audit event
+# (constitution §3.2). Generated from hooks/post-commit.template by install.sh;
+# __SPOOL__ and __BRANCH__ are substituted with this installation's real values.
+# It only writes one small JSON file; launchd WatchPaths does the rest.
+SPOOL="__SPOOL__"
+WANT_BRANCH="__BRANCH__"
+BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+[ "$BRANCH" = "$WANT_BRANCH" ] || exit 0
+[ -d "$SPOOL" ] || exit 0
+SHA="$(git rev-parse HEAD)"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+printf '{"type":"science_commit","sha":"%s","source":"post-commit","ts":"%s"}\n' \
+  "$SHA" "$STAMP" > "$SPOOL/evt-$STAMP-$SHA.json.tmp" &&
+  mv "$SPOOL/evt-$STAMP-$SHA.json.tmp" "$SPOOL/evt-$STAMP-$SHA.json"
+exit 0

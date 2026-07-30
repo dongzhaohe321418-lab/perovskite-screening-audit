@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "cycle_id",
+    "audit_report_id",
+    "report_sha256_confirmed",
+    "report_sha256",
+    "findings"
+  ],
+  "properties": {
+    "cycle_id": {"type": "string", "pattern": "^CYCLE-[0-9]{6}$"},
+    "audit_report_id": {"type": "string", "minLength": 1},
+    "report_sha256_confirmed": {"const": true},
+    "report_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["finding_id", "disposition"],
+        "properties": {
+          "finding_id": {"type": "string", "pattern": "^F-[A-Za-z0-9._-]+$"},
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "ACCEPT_AND_FIX",
+              "ACCEPT_AND_STOP",
+              "DISAGREE_WITH_EVIDENCE",
+              "NEED_PI_DECISION",
+              "DEFER_WITH_CAVEAT",
+              "PASS_NO_ACTION"
+            ]
+          },
+          "fix_commit": {"type": "string", "pattern": "^[a-fA-F0-9]{40}$"},
+          "evidence": {"type": "string", "minLength": 1}
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {"disposition": {"const": "ACCEPT_AND_FIX"}},
+              "required": ["disposition"]
+            },
+            "then": {"required": ["fix_commit"]},
+            "else": {"not": {"required": ["fix_commit"]}}
+          }
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

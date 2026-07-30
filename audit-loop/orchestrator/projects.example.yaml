@@ -1,0 +1,19 @@
+# Template for orchestrator/projects.yaml, the science-audit-controller project
+# config. install.sh generates the real file, filling the trusted audit root
+# commit from the audit repo it is pointed at.
+
+projects:
+  - project_id: __PROJECT_ID__
+    science_repo: __SCIENCE_NAME__
+    science_repo_full_name: __SCIENCE_FULL_NAME__
+    science_branch: __SCIENCE_BRANCH__
+    audit_repo: __AUDIT_NAME__
+    audit_repo_full_name: __AUDIT_FULL_NAME__
+    audit_branch: __AUDIT_BRANCH__
+    # Trusted root commit of the local Audit Repo audit branch. Every later audit
+    # push must fast-forward from the head the controller last accepted.
+    audit_initial_commit: "__AUDIT_INITIAL_COMMIT__"
+    # Constitution 3.2: every science-branch commit is an audit trigger.
+    # The empty-string prefix matches every changed path.
+    science_relevant_paths:
+      - ""
