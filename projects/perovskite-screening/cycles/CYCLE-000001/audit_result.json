@@ -1,0 +1,111 @@
+{
+  "cycle_id": "CYCLE-000001",
+  "audited_commit": "81fd505e71b8bde5faab169cb4c42b791f656949",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-001",
+      "title": "Substantive events were asserted in empty commits",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": ["submit_production_job", "publish_claim"],
+      "evidence": [
+        "cite: §14.1 / R-PRO-004",
+        "source: DETERMINISTIC",
+        "check_id: C-COMMIT-001",
+        "Tier-0 found 3 substantive zero-file commits: 08376f47954474d1da1a751c4a9ccfeaa2b95156, 363170b75ac1937b0b2991067f0b70ca31078d2f, and 8556dd6ad473118c72899355a5cc21042c442129.",
+        "reproduce: for c in $(git rev-list -60 81fd505e71b8bde5faab169cb4c42b791f656949); do [ -z \"$(git diff-tree --no-commit-id --name-only -r $c)\" ] && git log -1 --format='EMPTY %H %s' $c; done"
+      ]
+    },
+    {
+      "finding_id": "F-002",
+      "title": "Required manifest hashes and sizes do not identify current production artifacts",
+      "severity": "CRITICAL",
+      "status": "OPEN",
+      "blocked_scopes": ["submit_production_job", "publish_claim"],
+      "evidence": [
+        "cite: Gate 2 / R-EVD-001",
+        "source: DETERMINISTIC",
+        "check_id: C-HASH-001",
+        "Tier-0 found 5 disagreements: the audit-request evidence-manifest SHA mismatches, and both q0/q1 production manifests carry stale SHA-256 and size values for scripts/26_neb_harness.py.",
+        "reproduce: git show 81fd505e71b8bde5faab169cb4c42b791f656949:.audit/evidence_manifest.json | shasum -a 256"
+      ]
+    },
+    {
+      "finding_id": "F-003",
+      "title": "Manifest-referenced evidence paths are absent at the audited commit",
+      "severity": "CRITICAL",
+      "status": "OPEN",
+      "blocked_scopes": ["submit_production_job", "publish_claim"],
+      "evidence": [
+        "cite: Gate 2 / R-EVD-002",
+        "source: DETERMINISTIC",
+        "check_id: C-HASH-002",
+        "Tier-0 resolved 112 manifest references and found 15 absent paths, including the q1 production ref.extxyz source and 14 fixed-path output references.",
+        "reproduce: git cat-file -e 81fd505e71b8bde5faab169cb4c42b791f656949:results/objective1/dft/charge_relaxed/q1/q1_initial_relaxed.extxyz"
+      ]
+    },
+    {
+      "finding_id": "F-004",
+      "title": "Current authority documents assert incompatible Objective 1 gate and launch states",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": ["submit_production_job", "publish_claim"],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: DETERMINISTIC",
+        "check_id: C-STATE-001",
+        "Tier-0 found both a PASS/open gate contradiction and a submitted/awaiting-PI-go launch contradiction across current authority text.",
+        "reproduce: git show 81fd505e71b8bde5faab169cb4c42b791f656949:EXPERIMENT_AUDIT.md | sed -n '186p;188p'; git show 81fd505e71b8bde5faab169cb4c42b791f656949:results/objective1/dft/charge_relaxed/Q0_POLARON_EXCLUDED.md | sed -n '92,98p'"
+      ]
+    },
+    {
+      "finding_id": "F-005",
+      "title": "Repository-path-shaped links remain unresolved",
+      "severity": "LOW",
+      "status": "OPEN",
+      "blocked_scopes": ["publish_claim"],
+      "evidence": [
+        "cite: Gate 11 / R-EVD-002",
+        "source: DETERMINISTIC",
+        "check_id: C-LINK-001",
+        "finding_class: SOFT",
+        "Tier-0 reports 140 unresolved repository-path-shaped references in 72 scanned files.",
+        "reproduce: git cat-file -e 81fd505e71b8bde5faab169cb4c42b791f656949:THEORY_LEVEL_RECONCILIATION.md"
+      ]
+    },
+    {
+      "finding_id": "F-006",
+      "title": "Q3 current conclusion lacks the committed raw inputs required for recomputation",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": ["submit_production_job", "publish_claim"],
+      "evidence": [
+        "cite: Gate 2 / R-EVD-006",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:36-44 presents Q3 as current and names hpc/ job outputs plus P1/P2 discriminator outputs as raw data; Q0_POLARON_EXCLUDED.md:14-33 additionally relies on deloc, ELAS, and POL outputs for the quoted energies, residual, and derived bound.",
+        "The fixed commit contains no hpc/ path and no committed P1, P2, ELAS, or POL raw output, so those current values cannot be independently recomputed.",
+        "reproduce: for p in hpc P1.out P2.out ELAS.out POL.out; do git cat-file -e 81fd505e71b8bde5faab169cb4c42b791f656949:$p 2>/dev/null && echo exists:$p || echo absent:$p; done",
+        "proposed_check: C-RAWPROV-001 — parse every RESULTS_INDEX current-conclusion row, require its declared raw-data locators and all named calculation outputs to resolve in-tree, and fail a fixture that names hpc/ or a missing POL.out."
+      ]
+    },
+    {
+      "finding_id": "F-007",
+      "title": "Regression-suite self-declared group counts disagree with the executable suite",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "blocked_scopes": ["publish_claim"],
+      "evidence": [
+        "cite: §9 / R-NAV-003",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "README.md:16 declares 31 groups; results/objective2/CURRENT_STATUS.md:42 declares 26; EXPERIMENT_AUDIT.md:721 and :775 declare 22; the isolated clean-clone test transcript emits numbered groups [1] through [36].",
+        "reproduce: d=$(mktemp -d) && git clone --quiet --no-hardlinks /Users/ericdong/Desktop/perovskite-project/audit-loop/state/worktrees/CYCLE-000001 $d/repo && git -C $d/repo checkout --quiet --detach 81fd505e71b8bde5faab169cb4c42b791f656949 && (cd $d/repo && python3 scripts/20_test_checks.py | rg '^\\[[0-9]+\\]' | wc -l)",
+        "proposed_check: C-NAV-004 — execute or statically enumerate scripts/20_test_checks.py numbered groups and compare the measured count against every declared regression-suite group count; fail fixtures declaring 31, 26, or 22 for a 36-group script."
+      ]
+    }
+  ],
+  "verified_closed_findings": [],
+  "summary": "BLOCK: deterministic manifest/path/status failures prevent production submission and publication at this fixed snapshot; independent review also found missing raw Q3 provenance and inconsistent regression-suite counts."
+}
