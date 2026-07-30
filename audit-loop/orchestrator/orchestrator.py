@@ -768,14 +768,103 @@ class Orchestrator:
             tmp.replace(esc_path)
 
 
+    # ---------- doctor ----------
+
+    def doctor(self) -> int:
+        """Check every link in the chain and print what is blocking, if anything."""
+        ok, warn = "  ok  ", " WARN "
+        rows: list[tuple[str, str, str]] = []
+        problems = 0
+
+        def add(label: str, good: bool, detail: str) -> None:
+            nonlocal problems
+            rows.append((ok if good else warn, label, detail))
+            if not good:
+                problems += 1
+
+        add("secrets.env", self.secrets_env.exists(),
+            str(self.secrets_env) if self.secrets_env.exists() else "missing — run install.sh")
+        for label, repo, branch in (("science repo", self.science_repo,
+                                     self.project["science_branch"]),
+                                    ("audit repo", self.audit_repo,
+                                     self.project["audit_branch"])):
+            head = subprocess.run(["git", "rev-parse", "--short", f"refs/heads/{branch}"],
+                                  cwd=repo, capture_output=True, text=True)
+            dirty = subprocess.run(["git", "status", "--porcelain"], cwd=repo,
+                                   capture_output=True, text=True).stdout.strip()
+            add(label, head.returncode == 0,
+                f"{branch}@{head.stdout.strip() or '?'}"
+                + (f", {len(dirty.splitlines())} uncommitted file(s)" if dirty else ", clean"))
+
+        hook = Path(subprocess.run(["git", "rev-parse", "--absolute-git-dir"],
+                                   cwd=self.science_repo, capture_output=True,
+                                   text=True).stdout.strip()) / "hooks" / "post-commit"
+        hook_ok = hook.exists() and str(self.state_dir / "spool") in hook.read_text()
+        add("post-commit hook", hook_ok,
+            "installed and points here" if hook_ok else f"missing/stale at {hook}")
+
+        codex = self.cfg["codex"]["command"]
+        add("codex CLI", bool(shutil.which(codex) or Path(codex).exists()), codex)
+
+        agents = list((Path.home() / "Library/LaunchAgents").glob("*audit-loop.plist"))
+        add("launchd agent", bool(agents),
+            agents[0].name if agents else "not installed (manual/cron runs still work)")
+
+        mcp_cfg = Path.home() / ".claude-science/mcp/local-mcp.json"
+        registered = False
+        if mcp_cfg.exists():
+            try:
+                registered = any(
+                    str(self.loop_root / "mcp" / "audit_mcp_server.py") in json.dumps(s)
+                    for s in json.loads(mcp_cfg.read_text()).get("servers", []))
+            except json.JSONDecodeError:
+                registered = False
+        add("MCP registered", registered,
+            str(mcp_cfg) if registered else "not found in Claude Science config")
+
+        state = self.controller_state()
+        cycles = state.get("cycles", {})
+        add("controller state", True,
+            f"{len(cycles)} cycle(s), {len(state.get('event_log', []))} event(s)")
+
+        queued = len(list(self.spool.glob("evt-*.json")))
+        waiting = self._awaiting_disposition()
+        pending = sorted(p.stem for p in self.pending_dir.glob("CYCLE-*.json"))
+
+        print("audit-loop doctor\n" + "-" * 66)
+        for mark, label, detail in rows:
+            print(f"[{mark}] {label:<20} {detail}")
+        print("-" * 66)
+        print(f"queued events: {queued}   pending reviews: {', '.join(pending) or 'none'}")
+        if waiting:
+            cycle = cycles[waiting]
+            result = cycle.get("audit_result") or {}
+            print(f"\nBLOCKED ON: {waiting} is {result.get('decision')} with "
+                  f"{len(result.get('findings', []))} finding(s) and no disposition.")
+            print("  New science commits are queued, not audited, until Claude Science answers.")
+            print("  Next action: in Claude Science call get_pending_review, then "
+                  "submit_disposition.")
+        elif queued:
+            print("\nReady: queued events will be audited on the next pass.")
+        else:
+            print("\nIdle: no queued events, nothing awaiting disposition.")
+        if not registered:
+            print("\nNote: restart Claude Science so it loads the MCP server "
+                  "(stop && serve).")
+        return 1 if problems else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=str(Path(__file__).parent / "config.yaml"))
     parser.add_argument("--simulate-codex", action="store_true",
                         help="pipeline selftest: emit stub artifacts instead of running codex")
-    parser.add_argument("command", choices=["process"], help="process the event spool once")
+    parser.add_argument("command", choices=["process", "doctor"],
+                        help="process the event spool once, or check the whole chain")
     args = parser.parse_args()
     orch = Orchestrator(Path(args.config), simulate_codex=args.simulate_codex)
+    if args.command == "doctor":
+        return orch.doctor()
     orch.run_pass()
     return 0
 
