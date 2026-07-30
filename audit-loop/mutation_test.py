@@ -182,6 +182,11 @@ def build_env(name: str, scratch: Path) -> tuple[Path, Path, Path]:
                   "secrets_env": str(state / "secrets.env")},
         "project": real["project"],
         "codex": real["codex"],
+        # Carry the real enforcement policy through, or a mutation run silently
+        # exercises defaults instead of the rules production actually applies.
+        "severity_floors": real.get("severity_floors", {}),
+        "retention": real.get("retention", {}),
+        "budget": {**(real.get("budget") or {}), "enforce": False},
         "sync": {"science_fetch": False, "audit_push": False},
         "limits": {"max_cycles_per_hour": 20, "escalate_after_unresolved_cycles": 99},
         "notifications": {"macos": False, "log_file": "notifications.log"},

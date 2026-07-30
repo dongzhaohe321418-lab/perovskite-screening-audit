@@ -121,6 +121,48 @@ curl -X POST https://<controller>/authorizations \
 
 Authorizations are append-only, expire automatically, and are scoped to an exact actor, action, Science Commit, and manifest hash. The controller only returns a decision; it does not submit a production job.
 
+## Repairing a Fail-Closed Blocker Fold
+
+Blocker state is derived by folding the entire append-only event log. Any inconsistency — a duplicate open, a disposition without an open finding, a closure without a matching re-audit, an unknown event type — sets `fail_closed`. While `fail_closed` is set, every action check returns `DENY` with `BLOCKER_STATE_INCONSISTENT` and no audit can finalize. One bad event would otherwise halt the project permanently.
+
+The canonical identity of an event is the SHA-256 of its canonical JSON:
+
+```python
+hashlib.sha256(
+    json.dumps(event.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode("utf-8")
+).hexdigest()
+```
+
+Every fold error names that hash, so a `DENY` leads directly to the event to quarantine:
+
+```text
+close without open finding for F-404 (event_sha256=<64 hex characters>)
+```
+
+`GET /events?project_id=perovskite-screening` lists every event with its canonical hash and append-order index, plus the project's quarantine records. Events carrying no `project_id` are included in a project-scoped read, because those are exactly the events that fail that project's fold.
+
+Only the PI can quarantine an event:
+
+```bash
+curl -X POST https://<controller>/admin/quarantine-event \
+  -H "Authorization: Bearer $PI_APPROVAL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "project_id": "perovskite-screening",
+    "event_sha256": "FULL_64_CHARACTER_SHA256",
+    "reason": "Replayed closure event for a finding that was never opened.",
+    "approved_by": "principal-investigator"
+  }'
+```
+
+Quarantine is deliberately narrow:
+
+- The endpoint requires `PI_APPROVAL_TOKEN`. A missing token is `401` and an unconfigured token disables the endpoint with `503`.
+- Records are append-only in their own state key alongside `reason` and `approved_by`. Nothing is ever removed from the event log, and re-quarantining the same hash is idempotent.
+- A quarantined event is skipped by the fold. It contributes nothing and it cannot set `fail_closed`. It does not close, resolve, or verify anything: quarantining a `FINDING_OPENED` drops the blocker from the active set and emits no closure event, and the quarantine record is the audit trail for why.
+- Quarantine cannot revive a `FINAL` cycle's immutability guarantees or change any recorded cycle field. Finding IDs stay unreusable, so a quarantined finding ID cannot be re-reported by a later audit.
+- A hash that matches no event is recorded and has no effect, which lets the PI quarantine ahead of a replay.
+
 ## Current Adapters
 
 `codex_adapter.py` and `claude_adapter.py` generate and persist versioned task prompts. They intentionally remain adapter boundaries for real Codex and Claude task APIs. Audit validation, policy enforcement, state transitions, authentication, and GitHub commit reads are implemented now.

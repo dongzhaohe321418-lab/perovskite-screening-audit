@@ -358,3 +358,49 @@ def test_quarantining_finding_opened_drops_the_blocker_without_closing_it(tmp_pa
     assert [record.reason for record in storage.quarantines(cycle.project_id)] == [
         "F-001 was opened from a corrupted audit result."
     ]
+
+
+def test_quarantined_finding_id_cannot_be_reopened_by_a_later_audit(tmp_path):
+    storage, fake, first_cycle = final_blocked_cycle(tmp_path)
+    opened = next(
+        event
+        for event in storage.event_log()
+        if event.event == "FINDING_OPENED" and event.finding_id == "F-001"
+    )
+    storage.add_quarantine(
+        BlockerEventQuarantine(
+            project_id=first_cycle.project_id,
+            event_sha256=blocker_event_sha256(opened),
+            reason="F-001 was opened from a corrupted audit result.",
+            approved_by="principal-investigator",
+        )
+    )
+    second_cycle = pending_cycle_at_commit(storage, fake, "a" * 40)
+    validator = ReportValidator(
+        storage,
+        fake,
+        ClaudeAdapter(storage, ROOT / "prompts"),
+        ROOT / "schemas",
+    )
+    before, after = storage.audit_head(first_cycle.project_id), "c" * 40
+    paths = audit_artifacts(
+        fake,
+        after,
+        second_cycle,
+        decision="BLOCK",
+        findings=[
+            {
+                "finding_id": "F-001",
+                "title": "Issue 1 again",
+                "severity": "HIGH",
+                "status": "OPEN",
+                "blocked_scopes": ["production"],
+            }
+        ],
+    )
+    fake.set_diff("audit", before, after, paths)
+
+    result = validator.validate_audit_push("perovskite-screening", before, after)
+
+    assert not result.valid
+    assert "closed finding ID cannot be reused: F-001" in result.errors
