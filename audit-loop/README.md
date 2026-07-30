@@ -58,10 +58,16 @@ manifest 相符、无适用 blocker、且 PI 授权未过期。Claude Science �
 
 - 幂等:同 (commit, trigger, evidence hash) 只建一个 cycle;重复投递直接吸收。
 - 限速:`limits.max_cycles_per_hour`(默认 4),超出的事件留在 spool,launchd 每 15 分钟重试。
-- 升级即暂停:同一 finding 跨 `escalate_after_unresolved_cycles`(默认 3)个 FINAL cycle
-  未验证关闭 → `ESCALATE_TO_PI`,记入 `state/escalations.json`,并**停止对新提交的自动复审**,
-  直到经 MCP `acknowledge_escalation` 由你放行。这才是"在有限轮次内 PASS 或转人工"的实现;
-  只发通知然后继续转,证明不了终止性。
+- 升级即暂停,**三个独立触发器**——任一命中即 `ESCALATE_TO_PI`,记入
+  `state/escalations.json`,并**停止对新提交的自动复审**,直到经 MCP
+  `acknowledge_escalation` 由你放行:
+  1. **轮次**:同一 finding 跨 `escalate_after_unresolved_cycles`(默认 3)个 FINAL cycle 未关闭。
+  2. **时间**:blocking finding 开启超过 `stalled_finding_hours`(默认 24)仍无验证关闭。
+  3. **争议**:处置为 `DISAGREE_WITH_EVIDENCE` 或 `NEED_PI_DECISION` —— 审计者与执行者
+     各执一词本来就是人该裁决的,不该让两个 agent 互相磨。
+
+  只有轮次一个维度是不够的:被反驳且此后不再提交的 finding 不产生新周期,计数器永不前进,
+  于是它无限期阻断生产而无人被通知。那不是无限循环,是**静默死锁**——更难发现。
 - `PASS` 不自动触发提交,`BLOCK` 不自动触发昂贵修复——都只触发 disposition(§3.5)。
 
 ## 目录
@@ -119,7 +125,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ericdong.audit-loop.
 
 | 强度 | 内容 |
 |---|---|
-| **机械证明** | controller 66 个单元测试 + 编排器 3 个单元测试;Tier-0 12 项检查在真实仓库上确定性可复现;干净克隆在陌生路径 install + 全套测试通过 |
+| **机械证明** | controller 66 个单元测试 + 编排器 10 个单元测试;Tier-0 12 项检查在真实仓库上确定性可复现;干净克隆在陌生路径 install + 全套测试通过 |
 | **模拟端到端** | `selftest.py` 全链路 4/4,但 Codex 由 `--simulate-codex` 桩替代 |
 | **真实审计** | 5 轮真实 Codex 审计(1 轮生产 + 4 轮 mutation),每轮 ~316 万 input tokens |
 | **未验证** | **验证关闭路径(disposition → 修复 → 复审 → verified closure)从未用真实审计器跑通**。相关两处缺陷由推理+单元测试修复,不等于端到端成立。 |
@@ -129,6 +135,9 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ericdong.audit-loop.
 - **Tier-0 覆盖率 12/27**:规则手册声明 27 个 `C-*`,已实现 11 个;其余 15 条规则纯靠 LLM 判断。
 - **`severity_floors` 是事后拟合的**:下限依据真实审计观测到的评级设定,是策略选择而非独立验证。
 - **假阳性率数据极弱**:`C-INJECT-001` / `C-NUM-001` 各只在一棵树上验证过无假阳性,n=1 几乎不排除任何东西。
+- **doctor 会显示 active blockers**:此前有 active blocker 时它仍报 "Idle",这违反我们
+  自己的 `R-GRD-001`(会撒谎的守卫比没有守卫更糟)。现在阻断中必然显示,并区分
+  "Stalled"(无待办但仍在阻断)与 "Idle"(真的什么都没有)。
 - **执行来源部分自述**:回执已绑定策略包(宪法/规则手册/检查器哈希)、模型标识与
   `prompt_sha256`(编排器比对本轮实际下发的提示词),`provider` 字段可选记录;但仍无
   provider request ID 或独立 attestation,成本台账靠 cwd 匹配会话文件。

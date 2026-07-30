@@ -1308,20 +1308,76 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
 
     # ---------- escalation (constitution 3.4) ----------
 
-    def scan_escalations(self) -> None:
-        state = self.controller_state()
-        events = state.get("event_log", [])
-        cycles = state.get("cycles", {})
-        final_order = [c["cycle_id"] for c in sorted(cycles.values(), key=lambda c: c["cycle_id"])
-                       if c.get("status") == "FINAL"]
-        opened: dict[str, str] = {}
-        closed: set[str] = set()
-        for event in events:
+    def active_blockers(self) -> dict[str, dict[str, Any]]:
+        """Blocking findings still open, with when each was opened.
+
+        Read straight from the append-only event log rather than from any cached
+        summary, so a stalled dispute cannot hide behind a stale status field.
+        """
+        opened: dict[str, dict[str, Any]] = {}
+        for event in self.controller_state().get("event_log", []):
+            finding_id = event.get("finding_id")
+            if not finding_id:
+                continue
             if event.get("event") == "FINDING_OPENED":
-                opened.setdefault(event["finding_id"], event.get("cycle_id") or "")
+                if (event.get("data") or {}).get("blocking", True):
+                    opened.setdefault(finding_id, {
+                        "finding_id": finding_id,
+                        "cycle_id": event.get("cycle_id") or "",
+                        "opened_at": event.get("timestamp") or "",
+                        "blocked_scopes": event.get("blocked_scopes") or [],
+                        "disposition": None,
+                    })
             elif event.get("event") == "FINDING_VERIFIED_CLOSED":
-                closed.add(event["finding_id"])
-        threshold = int(self.cfg["limits"].get("escalate_after_unresolved_cycles", 3))
+                opened.pop(finding_id, None)
+            elif event.get("event") == "DISPOSITION_RECORDED" and finding_id in opened:
+                opened[finding_id]["disposition"] = (
+                    event.get("data") or {}).get("disposition")
+        return opened
+
+    @staticmethod
+    def _age_hours(timestamp: str) -> float:
+        try:
+            opened = dt.datetime.fromisoformat(timestamp)
+        except ValueError:
+            return 0.0
+        if opened.tzinfo is None:
+            opened = opened.replace(tzinfo=UTC)
+        return (dt.datetime.now(UTC) - opened).total_seconds() / 3600
+
+    # A disagreement between the auditor and the executor is not something either
+    # of them should grind out: two agents each asserting the other is wrong is
+    # precisely the case a human is for.
+    DISPUTED_DISPOSITIONS = {"DISAGREE_WITH_EVIDENCE", "NEED_PI_DECISION"}
+
+    def _escalation_reason(self, blocker: dict[str, Any], final_order: list[str]) -> str | None:
+        """Why this open blocker needs the PI now, if it does.
+
+        Three independent triggers. Counting audit cycles alone leaves a hole: a
+        finding disputed with no further commits produces no new cycles, so a
+        cycle counter never advances and the finding blocks production forever
+        with nobody told. Time and disposition close that.
+        """
+        if blocker["disposition"] in self.DISPUTED_DISPOSITIONS:
+            return (f"the executor answered {blocker['disposition']}; auditor and "
+                    "executor disagree, which is a PI decision, not a loop")
+        cycle_id = blocker["cycle_id"]
+        if cycle_id in final_order:
+            seen = len(final_order[final_order.index(cycle_id):])
+            threshold = int(self.cfg["limits"].get("escalate_after_unresolved_cycles", 3))
+            if seen >= threshold:
+                return f"unresolved across {seen} audit cycles"
+        stalled_hours = float(self.cfg["limits"].get("stalled_finding_hours", 24))
+        age = self._age_hours(blocker["opened_at"])
+        if stalled_hours > 0 and age >= stalled_hours:
+            return f"open and blocking for {age:.0f}h with no verified closure"
+        return None
+
+    def scan_escalations(self) -> None:
+        cycles = self.controller_state().get("cycles", {})
+        final_order = [c["cycle_id"]
+                       for c in sorted(cycles.values(), key=lambda c: c["cycle_id"])
+                       if c.get("status") == "FINAL"]
         esc_path = self.state_dir / "escalations.json"
         try:
             esc = json.loads(esc_path.read_text(encoding="utf-8"))
@@ -1329,27 +1385,30 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
             esc = {"escalations": []}
         known = {e["finding_id"] for e in esc["escalations"]}
         changed = False
-        for finding_id, opened_cycle in opened.items():
-            if finding_id in closed or finding_id in known or opened_cycle not in final_order:
+        for finding_id, blocker in sorted(self.active_blockers().items()):
+            if finding_id in known:
                 continue
-            cycles_seen = final_order[final_order.index(opened_cycle):]
-            if len(cycles_seen) >= threshold:
-                esc["escalations"].append({
-                    "escalation_id": f"ESC-{len(esc['escalations']) + 1:04d}",
-                    "finding_id": finding_id,
-                    "cycle_ids": cycles_seen,
-                    "opened_at": now_iso(),
-                    "status": "OPEN",
-                })
-                changed = True
-                self.notify("Audit Loop: ESCALATE_TO_PI",
-                            f"finding {finding_id} unresolved across {len(cycles_seen)} audit "
-                            "cycles — PI decision required (constitution 3.4)")
+            reason = self._escalation_reason(blocker, final_order)
+            if not reason:
+                continue
+            cycle_ids = (final_order[final_order.index(blocker["cycle_id"]):]
+                         if blocker["cycle_id"] in final_order else [])
+            esc["escalations"].append({
+                "escalation_id": f"ESC-{len(esc['escalations']) + 1:04d}",
+                "finding_id": finding_id,
+                "reason": reason,
+                "cycle_ids": cycle_ids,
+                "opened_at": now_iso(),
+                "status": "OPEN",
+            })
+            changed = True
+            self.notify("Audit Loop: ESCALATE_TO_PI",
+                        f"finding {finding_id}: {reason} — PI decision required "
+                        "(constitution 3.4)")
         if changed:
             tmp = esc_path.with_suffix(".tmp")
             tmp.write_text(json.dumps(esc, indent=2), encoding="utf-8")
             tmp.replace(esc_path)
-
 
     # ---------- doctor ----------
 
@@ -1426,6 +1485,15 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
             print(f"[{mark}] {label:<20} {detail}")
         print("-" * 66)
         print(f"queued events: {queued}   pending reviews: {', '.join(pending) or 'none'}")
+        blockers = self.active_blockers()
+        if blockers:
+            print(f"\nACTIVE BLOCKERS: {len(blockers)} finding(s) currently deny protected "
+                  "actions.")
+            for finding_id, blocker in sorted(blockers.items()):
+                age = self._age_hours(blocker["opened_at"])
+                scopes = ", ".join(blocker["blocked_scopes"]) or "(none declared)"
+                answered = blocker["disposition"] or "no disposition yet"
+                print(f"  {finding_id}  open {age:.0f}h  scopes: {scopes}  [{answered}]")
         if waiting:
             cycle = cycles[waiting]
             result = cycle.get("audit_result") or {}
@@ -1436,8 +1504,15 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
                   "submit_disposition.")
         elif queued:
             print("\nReady: queued events will be audited on the next pass.")
+        elif blockers:
+            # Never report idle while something is denying production: a guard that
+            # says "all clear" during a live block is worse than no guard.
+            print("\nStalled: nothing queued and no cycle awaiting an answer, but the "
+                  "blockers above still deny protected actions.")
+            print("  Land a fix and let the next audit verify it, or acknowledge the "
+                  "escalation if this needs your decision.")
         else:
-            print("\nIdle: no queued events, nothing awaiting disposition.")
+            print("\nIdle: no queued events, no active blockers, nothing awaiting disposition.")
         if not registered:
             print("\nNote: restart Claude Science so it loads the MCP server "
                   "(stop && serve).")

@@ -67,6 +67,10 @@ limits:
   # A new science commit is queued, not audited, while an earlier FINAL cycle's
   # findings are unanswered (constitution 3.1). Notify if that stalls this long.
   stalled_disposition_hours: 12
+  # Counting audit cycles alone leaves a hole: a finding disputed with no further
+  # commits produces no new cycles, so a cycle counter never advances while the
+  # finding blocks production. Escalate on age too.
+  stalled_finding_hours: 24
 
 notifications:
   macos: true
