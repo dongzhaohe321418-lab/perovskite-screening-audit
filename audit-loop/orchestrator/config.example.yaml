@@ -69,3 +69,8 @@ limits:
 notifications:
   macos: true
   log_file: notifications.log
+
+# A HARD check that did not run is not a pass. Only checks listed here may SKIP
+# without the verdict having to be NOT_VERIFIABLE or cite them explicitly.
+tier0_skip_allowed:
+  - C-TEST-001    # clean-clone execution of the audited repo's own suite, off by default

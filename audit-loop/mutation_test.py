@@ -185,6 +185,7 @@ def build_env(name: str, scratch: Path) -> tuple[Path, Path, Path]:
         # Carry the real enforcement policy through, or a mutation run silently
         # exercises defaults instead of the rules production actually applies.
         "severity_floors": real.get("severity_floors", {}),
+        "tier0_skip_allowed": real.get("tier0_skip_allowed", []),
         "retention": real.get("retention", {}),
         "budget": {**(real.get("budget") or {}), "enforce": False},
         "sync": {"science_fetch": False, "audit_push": False},

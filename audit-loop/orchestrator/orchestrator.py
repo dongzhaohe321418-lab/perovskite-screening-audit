@@ -590,16 +590,16 @@ class Orchestrator:
             dst = schemas_dst / schema.name
             dst.unlink(missing_ok=True)
             shutil.copyfile(schema, dst)
-        constitution_sha = hashlib.sha256(
-            (cycle_dir / "CODEX_AUDIT_WORKFLOW.md").read_bytes()).hexdigest()
         calibration = self._stage_calibration(cycle_dir)
         prior = self._prior_findings_context()
+        bundle = self._policy_bundle(cycle_dir, calibration)
+        (cycle_dir / "policy_bundle.json").write_text(
+            json.dumps(bundle, indent=2, sort_keys=True), encoding="utf-8")
         context = {
             "cycle_id": cycle_id,
             "audited_commit": sha,
             "project_id": self.project["project_id"],
-            "constitution": {"file": "CODEX_AUDIT_WORKFLOW.md", "version": "1.1",
-                             "sha256": constitution_sha},
+            "policy_bundle": bundle,
             "rulebook_index": "AUDIT_RULEBOOK.md",
             "worktree": str(self.worktrees_dir / cycle_id),
             "tier0_report": "check_report.json",
@@ -608,6 +608,46 @@ class Orchestrator:
         }
         (cycle_dir / "cycle_context.json").write_text(
             json.dumps(context, indent=2, sort_keys=True), encoding="utf-8")
+
+    def _policy_bundle(self, cycle_dir: Path, calibration: list[dict[str, Any]]) -> dict[str, Any]:
+        """The exact policy this cycle runs under, hashed.
+
+        A receipt that cannot name its own constitution, rulebook and checker
+        version proves nothing about what was actually enforced, so the auditor is
+        required to echo this bundle back and the orchestrator refuses artifacts
+        that do not match it.
+        """
+        checks_dir = self.loop_root / "checks"
+        checks_sha = hashlib.sha256(
+            b"checks_script:" + (checks_dir / "deterministic_checks.py").read_bytes()
+            + b"\nconfig:" + (checks_dir / "checks.yaml").read_bytes()).hexdigest()
+        try:
+            lock = json.loads(
+                (self.loop_root / "rulebook" / "rulebook.lock.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            lock = {}
+        return {
+            "constitution_sha256": hashlib.sha256(
+                (cycle_dir / "CODEX_AUDIT_WORKFLOW.md").read_bytes()).hexdigest(),
+            "rulebook_version": str(lock.get("rulebook_version", "unknown")),
+            "rulebook_sha256": str(lock.get("rulebook_sha256", "0" * 64)),
+            "checks_sha256": checks_sha,
+            **({"calibration_sha256": sorted(c["sha256"] for c in calibration)}
+               if calibration else {}),
+        }
+
+    def _known_citations(self) -> tuple[set[str], set[str]]:
+        """Rule and check IDs that actually exist, so a citation cannot be invented."""
+        try:
+            lock = json.loads(
+                (self.loop_root / "rulebook" / "rulebook.lock.json").read_text(encoding="utf-8"))
+            rules = {r["rule_id"] for r in lock.get("rules", [])}
+        except (OSError, json.JSONDecodeError, KeyError, TypeError):
+            rules = set()
+        source = (self.loop_root / "checks" / "deterministic_checks.py").read_text(
+            encoding="utf-8", errors="replace")
+        checks = set(re.findall(r'@check\(\s*"(C-[A-Z]+-\d+)"', source))
+        return rules, checks
 
     def _stage_calibration(self, cycle_dir: Path) -> list[dict[str, Any]]:
         """Copy prior-audit reference transcripts in, capped and hash-recorded.
@@ -776,6 +816,10 @@ class Orchestrator:
   stop_production_job, publish_claim, change_locked_protocol, exclude_scientific_data,
   increase_budget, operate_instrument,或 "*");非 BLOCK 时任何 finding 不得带 blocked_scopes。
   evidence 数组第一项必须是规则引用,格式 "cite: <宪法 Gate/节号> / <R-XXX-NNN 或 C-XXX-NNN>";
+  **引用的 R-*/C-* 必须真实存在**(见 AUDIT_RULEBOOK.md 与 check_report.json),虚构 ID 整轮作废;
+  **每个 Tier-0 HARD 失败必须有各自专属的一条 finding**,不得用一条 finding 笼统认领多个失败;
+  **任何 HARD 检查若为 SKIP 或 ERROR**,你必须为它单独写 finding,或把 decision 定为 NOT_VERIFIABLE
+  ——没跑的检查不等于通过。
   Tier-0 已覆盖的发现标 "source: DETERMINISTIC",你独立发现的标 "source: JUDGMENT"。
   你独立发现的每个 HARD 级缺陷,evidence 中必须附一条可复现命令,并提议一个新的 C-* 检查
   **可复现命令必须可移植:审计工件会公开发布。禁止出现本机绝对路径、worktree 路径、
@@ -784,7 +828,9 @@ class Orchestrator:
   对 cycle_context.json 中带 fix_commit 且 fix_commit == "{sha}" 的既往 finding:独立验证修复后
   才可写入 verified_closed_findings(finding_id + 非空 verification_summary);验证不了就保持沉默。
 - out/codex_run_metadata.json — 符合 schema;cycle_id/audited_commit 同上;runner 写 "codex-cli";
-  started_at/completed_at 为真实 ISO-8601 UTC 时间。
+  model 写你实际使用的模型标识;started_at/completed_at 为真实 ISO-8601 UTC 时间。
+  **policy_bundle 必填,逐字复制 ./policy_bundle.json 的内容**——一份说不出自己依据哪套宪法、
+  哪版规则手册、哪版检查器的回执,不能证明任何事。编排器会逐字段比对,不符即整轮作废。
 - out/report_manifest.json — 符合 schema;files 覆盖其余三个文件,sha256 为各文件原始字节的 SHA-256。
 
 ## 纪律
@@ -858,7 +904,9 @@ class Orchestrator:
                   f"tier0 hard fails: {hard_fails}).\n\n### Execution declaration\n"
                   "- Codex repository changes: NONE\n- Codex remote/HPC/GPU/instrument actions: NONE\n")
         metadata = {"cycle_id": cycle_id, "audited_commit": sha, "runner": "simulated-codex",
-                    "started_at": now_iso(), "completed_at": now_iso()}
+                    "model": "simulated", "started_at": now_iso(), "completed_at": now_iso(),
+                    "policy_bundle": json.loads(
+                        (cycle_dir / "policy_bundle.json").read_text(encoding="utf-8"))}
         (out_dir / "audit_report.md").write_text(report, encoding="utf-8")
         (out_dir / "audit_result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
         (out_dir / "codex_run_metadata.json").write_text(json.dumps(metadata, indent=2),
@@ -882,7 +930,8 @@ class Orchestrator:
         try:
             result = json.loads((out_dir / "audit_result.json").read_text(encoding="utf-8"))
             manifest = json.loads((out_dir / "report_manifest.json").read_text(encoding="utf-8"))
-            json.loads((out_dir / "codex_run_metadata.json").read_text(encoding="utf-8"))
+            metadata = json.loads(
+                (out_dir / "codex_run_metadata.json").read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
             return [f"artifact JSON parse error: {exc}"]
         if result.get("cycle_id") != cycle_id:
@@ -896,6 +945,7 @@ class Orchestrator:
         elif match.group(1) != result.get("decision"):
             errors.append("Decision line in markdown disagrees with audit_result.json")
         errors.extend(self._enforce_tier0_grading(cycle_id, result))
+        errors.extend(self._enforce_policy_bundle(cycle_id, metadata))
         for name, entry in (manifest.get("files") or {}).items():
             path = out_dir / name
             if not path.exists():
@@ -908,51 +958,114 @@ class Orchestrator:
         return errors
 
     SEVERITY_ORDER = ("INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL")
+    # Deliberately loose on the family segment: a citation of R-FAKE-999 must be
+    # captured and rejected, not silently skipped for failing to look well-formed.
+    CITATION_RE = re.compile(r"\b((?:R|C)-[A-Z]+-\d+)\b")
+
+    @staticmethod
+    def _finding_citations(finding: dict[str, Any]) -> set[str]:
+        """IDs this finding actually claims, ignoring forward-looking proposals.
+
+        `proposed_check:` names a check that deliberately does not exist yet — the
+        ratchet by which a judgment finding becomes mechanically detectable — so it
+        must never be read as a citation of existing policy.
+        """
+        claimed: set[str] = set()
+        for item in finding.get("evidence", []):
+            text = str(item)
+            if re.match(r"\s*proposed_check\s*:", text, re.IGNORECASE):
+                continue
+            claimed |= set(Orchestrator.CITATION_RE.findall(text))
+        return claimed
 
     def _enforce_tier0_grading(self, cycle_id: str, result: dict[str, Any]) -> list[str]:
-        """Machine truth fixes the floor; the auditor may only grade at or above it.
+        """Bind the receipt to machine truth, and refuse a receipt that cannot.
 
-        Measured across four real audits of one tree, the same mechanically proven
-        defect was graded CRITICAL in some runs and HIGH in others. Severity is
-        therefore not a reproducible LLM output, so for anything a script proved
-        it is decided here: every Tier-0 HARD failure must be cited by at least
-        one finding graded no lower than its configured floor, and any such
-        failure forces a BLOCK decision. Judgment findings remain the auditor's.
+        Four properties, each a hole a real audit of a comparable system found:
+        a missing or silently-skipped checker must not read as "nothing wrong";
+        severity for a script-proven defect is fixed here rather than left to a
+        model that graded the same defect CRITICAL in one run and HIGH in another;
+        each proven defect needs its own finding, so one blanket citation cannot
+        discharge several; and a citation must name policy that exists.
         """
+        errors: list[str] = []
         report_path = self.cycles_dir / cycle_id / "check_report.json"
         if not report_path.exists():
-            return []
+            return ["check_report.json is absent; a cycle with no Tier-0 evidence "
+                    "cannot yield a verdict"]
         try:
             tier0 = json.loads(report_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             return ["check_report.json is unreadable; Tier-0 grading cannot be enforced"]
-        floors = self.cfg.get("severity_floors") or {}
-        default_floor = str(floors.get("default", "HIGH")).upper()
-        hard_failures = [
-            r["check_id"] for r in tier0.get("results", [])
-            if r.get("class") == "HARD" and r.get("status") in {"FAIL", "ERROR"}
-        ]
-        if not hard_failures:
-            return []
 
         findings = result.get("findings", [])
-        cited: dict[str, list[str]] = {}
-        for finding in findings:
-            blob = " ".join(str(e) for e in finding.get("evidence", []))
-            for check_id in set(re.findall(r"\bC-[A-Z]+-\d+\b", blob)):
-                cited.setdefault(check_id, []).append(finding.get("severity", "INFO"))
+        claims = {f.get("finding_id") or f"#{i}": self._finding_citations(f)
+                  for i, f in enumerate(findings)}
 
-        errors: list[str] = []
-        for check_id in sorted(hard_failures):
+        # A citation must name policy that exists, or a receipt can invent its basis.
+        known_rules, known_checks = self._known_citations()
+        if known_rules or known_checks:
+            for finding_id, cited in sorted(claims.items()):
+                for ident in sorted(cited):
+                    pool = known_rules if ident.startswith("R-") else known_checks
+                    if pool and ident not in pool:
+                        errors.append(
+                            f"{finding_id} cites {ident}, which is not in the locked "
+                            "rulebook or the implemented check set")
+
+        # A HARD check that did not run is not a pass. Only checks the operator has
+        # explicitly declared optional may skip.
+        allowed_skips = set(self.cfg.get("tier0_skip_allowed") or [])
+        degraded = sorted(
+            r["check_id"] for r in tier0.get("results", [])
+            if r.get("class") == "HARD" and r.get("status") == "SKIP"
+            and r["check_id"] not in allowed_skips)
+        errored = sorted(r["check_id"] for r in tier0.get("results", [])
+                         if r.get("class") == "HARD" and r.get("status") == "ERROR")
+        if degraded or errored:
+            unaccounted = [c for c in degraded + errored
+                           if not any(c in cited for cited in claims.values())]
+            if unaccounted and result.get("decision") != "NOT_VERIFIABLE":
+                errors.append(
+                    f"HARD checks did not run ({', '.join(unaccounted)}) and are not "
+                    "reported; the verdict must be NOT_VERIFIABLE or cite each one")
+
+        hard_failures = sorted(r["check_id"] for r in tier0.get("results", [])
+                               if r.get("class") == "HARD" and r.get("status") == "FAIL")
+        if not hard_failures:
+            return errors
+
+        floors = self.cfg.get("severity_floors") or {}
+        default_floor = str(floors.get("default", "HIGH")).upper()
+        severity_of = {fid: (f.get("severity") or "INFO").upper()
+                       for fid, f in zip(claims, findings)}
+
+        # One finding per proven defect: a single blanket finding must not discharge
+        # several distinct machine-proven failures.
+        assigned: dict[str, str] = {}
+        for check_id in hard_failures:
             floor = str(floors.get(check_id, default_floor)).upper()
-            severities = cited.get(check_id)
-            if not severities:
+            candidates = [
+                fid for fid, cited in sorted(claims.items())
+                if check_id in cited and fid not in assigned.values()
+                and self.SEVERITY_ORDER.index(severity_of.get(fid, "INFO"))
+                >= self.SEVERITY_ORDER.index(floor)
+            ]
+            if candidates:
+                assigned[check_id] = candidates[0]
+                continue
+            citing = [fid for fid, cited in sorted(claims.items()) if check_id in cited]
+            if not citing:
                 errors.append(
                     f"Tier-0 HARD failure {check_id} is not cited by any finding; a "
                     "machine-proven defect may not be dropped")
-                continue
-            best = max(severities, key=self.SEVERITY_ORDER.index)
-            if self.SEVERITY_ORDER.index(best) < self.SEVERITY_ORDER.index(floor):
+            elif all(fid in assigned.values() for fid in citing):
+                errors.append(
+                    f"{check_id} is only cited by findings already accounted for "
+                    f"({', '.join(citing)}); each proven defect needs its own finding")
+            else:
+                best = max((severity_of.get(fid, "INFO") for fid in citing),
+                           key=self.SEVERITY_ORDER.index)
                 errors.append(
                     f"{check_id} is graded {best} but its Tier-0 floor is {floor}")
         if errors:
@@ -960,7 +1073,29 @@ class Orchestrator:
         if result.get("decision") != "BLOCK":
             errors.append(
                 f"decision is {result.get('decision')} while Tier-0 HARD checks failed "
-                f"({', '.join(sorted(hard_failures))}); a machine-proven defect blocks")
+                f"({', '.join(hard_failures)}); a machine-proven defect blocks")
+        return errors
+
+    def _enforce_policy_bundle(self, cycle_id: str, metadata: dict[str, Any]) -> list[str]:
+        """The receipt must name the exact policy it was produced under."""
+        expected_path = self.cycles_dir / cycle_id / "policy_bundle.json"
+        if not expected_path.exists():
+            return ["policy_bundle.json was not staged for this cycle"]
+        expected = json.loads(expected_path.read_text(encoding="utf-8"))
+        declared = metadata.get("policy_bundle")
+        if not isinstance(declared, dict):
+            return ["codex_run_metadata does not declare a policy_bundle"]
+        errors = [
+            f"policy_bundle.{key} is {declared.get(key)!r} but this cycle ran under "
+            f"{value!r}"
+            for key, value in sorted(expected.items())
+            if key != "calibration_sha256" and declared.get(key) != value
+        ]
+        expected_cal = set(expected.get("calibration_sha256") or [])
+        declared_cal = set(declared.get("calibration_sha256") or [])
+        if expected_cal != declared_cal:
+            errors.append("policy_bundle.calibration_sha256 does not match the "
+                          "calibration material staged for this cycle")
         return errors
 
     def _commit_and_finalize(self, cycle_id: str, out_dir: Path) -> list[str] | None:

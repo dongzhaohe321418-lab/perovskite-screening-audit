@@ -42,6 +42,10 @@ class Cycle(BaseModel):
     audit_report_sha256: str | None = None
     audit_report_id: str | None = None
     audit_result: dict[str, Any] | None = None
+    # Receipt chain. Computed by the controller at finalization from the previous
+    # FINAL cycle, never declared by the auditor, so the order of receipts cannot
+    # be forged or forked: a receipt names exactly one predecessor.
+    parent_report_sha256: str | None = None
     disposition_status: DispositionStatus = DispositionStatus.NOT_STARTED
     created_at: str = Field(default_factory=utc_now)
     updated_at: str = Field(default_factory=utc_now)

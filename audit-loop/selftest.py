@@ -58,6 +58,7 @@ def main() -> int:
     }
     import yaml
     (scratch / "projects.yaml").write_text(yaml.safe_dump(projects))
+    real = yaml.safe_load((LOOP_ROOT / "orchestrator" / "config.yaml").read_text())
 
     config = {
         "paths": {
@@ -78,6 +79,9 @@ def main() -> int:
         },
         "codex": {"command": "/bin/false", "args": [], "timeout_seconds": 60, "max_retries": 1},
         "sync": {"science_fetch": False, "audit_push": False},
+        # Mirror production policy, or the harness silently tests weaker rules.
+        "severity_floors": real["severity_floors"],
+        "tier0_skip_allowed": real.get("tier0_skip_allowed", []),
         "limits": {"max_cycles_per_hour": 10, "escalate_after_unresolved_cycles": 1},
         "notifications": {"macos": False, "log_file": "notifications.log"},
     }

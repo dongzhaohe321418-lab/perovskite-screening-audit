@@ -3,11 +3,13 @@ from __future__ import annotations
 import hashlib
 import json
 
+import pytest
+
 from app.claude_adapter import ClaudeAdapter
 from app.codex_adapter import CodexAdapter
 from app.cycle_manager import CycleManager
 from app.report_validator import ReportValidator
-from app.storage import JsonStorage
+from app.storage import ImmutableCycleError, JsonStorage
 
 from tests.utils import ROOT, FakeGitHub, audit_artifacts, valid_audit_request
 
@@ -450,3 +452,39 @@ def test_first_audit_push_must_match_configured_trusted_head(tmp_path):
     assert result.errors == [
         "first audit push does not start from the configured trusted audit commit"
     ]
+
+
+def test_finalized_cycles_form_an_unforgeable_receipt_chain(tmp_path):
+    """Each receipt names exactly one predecessor, computed by the controller."""
+    storage, fake, first, validator = make_cycle(tmp_path)
+    result = validate_artifacts(fake, validator, first, "0" * 40, "3" * 40,
+                                decision="PASS", findings=[])
+    assert result.valid, result.errors
+    first_final = storage.get_cycle(first.cycle_id)
+    assert first_final.parent_report_sha256 is None
+
+    second_commit = "7" * 40
+    fake.files[("science", second_commit, ".audit/audit_request.json")] = json.dumps(
+        valid_audit_request()
+    )
+    codex = CodexAdapter(storage, ROOT / "prompts")
+    manager = CycleManager(storage, fake, codex, ROOT / "schemas")
+    second = manager.handle_science_push(first.project_id, first.science_repo, second_commit)
+    result = validate_artifacts(fake, validator, second, "3" * 40, "4" * 40,
+                               decision="PASS", findings=[])
+    assert result.valid, result.errors
+
+    second_final = storage.get_cycle(second.cycle_id)
+    assert second_final.parent_report_sha256 == first_final.audit_report_sha256
+    # The chain is a property of the receipts, not of their bodies: these two
+    # fixtures share report text, so the hashes coincide while the link is real.
+    assert second_final.audit_repo_commit != first_final.audit_repo_commit
+    assert second_final.cycle_id > first_final.cycle_id
+
+
+def test_parent_report_hash_is_immutable_once_final(tmp_path):
+    storage, fake, cycle, validator = make_cycle(tmp_path)
+    assert validate_artifacts(fake, validator, cycle, "0" * 40, "3" * 40,
+                              decision="PASS", findings=[]).valid
+    with pytest.raises(ImmutableCycleError):
+        storage.update_cycle(cycle.cycle_id, parent_report_sha256="9" * 64)

@@ -55,6 +55,16 @@ class FakeGitHub(GitHubClient):
         self.diffs[(repo_kind, before_sha, after_sha)] = paths
 
 
+def policy_bundle() -> dict[str, Any]:
+    """A well-formed policy bundle: the receipt must always name its own policy."""
+    return {
+        "constitution_sha256": "a" * 64,
+        "rulebook_version": "1.0.0",
+        "rulebook_sha256": "b" * 64,
+        "checks_sha256": "c" * 64,
+    }
+
+
 def valid_audit_request() -> dict[str, Any]:
     return {
         "project_id": PROJECT_ID,
@@ -88,8 +98,10 @@ def audit_artifacts(
                 "cycle_id": cycle.cycle_id,
                 "audited_commit": cycle.science_commit,
                 "runner": "fake-codex",
+                "model": "fake-model",
                 "started_at": "2026-07-30T00:00:00+00:00",
                 "completed_at": "2026-07-30T00:01:00+00:00",
+                "policy_bundle": policy_bundle(),
             },
             sort_keys=True,
         ),

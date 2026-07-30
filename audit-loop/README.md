@@ -57,9 +57,10 @@ Codex 不得与 Tier-0 结果矛盾,引用其失败必须带 `check_id`;Codex �
 | 路径 | 作用 |
 |---|---|
 | `rulebook/` | 宪法(逐字)+ 机器可解析规则索引 `AUDIT_RULEBOOK.md`(31 条 R-* 规则,从属宪法)+ 两个 lock 文件 |
-| `checks/` | Tier-0 确定性检查(9 项 C-* 检查,stdlib+yaml,无 LLM) |
+| `checks/` | Tier-0 确定性检查(11 项 C-* 检查,stdlib+yaml,无 LLM) |
 | `orchestrator/` | `orchestrator.py`(调度核心)、`make_audit_request.py`(代 Claude Science 重生成 `.audit/`)、`config.yaml`、`projects.yaml` |
 | `mcp/` | Claude Science 的 local MCP server(6 个工具,注册方法见 `mcp/README_MCP.md`) |
+| `mutation_test.py` | 对抗性测试:注入已知缺陷,跑真实审计,看是否被抓到 |
 | `hooks/` `launchd/` `install.sh` | 触发装置;`selftest.py` 在 scratch 克隆里跑全链路 |
 | `state/` | spool、cycles、worktrees、pending_reviews、controller state、secrets.env(600)、日志 |
 
@@ -96,16 +97,39 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ericdong.audit-loop.
 4. `pyproject.toml`:`jsonschema[format-nongpl]`,`format: date-time` 校验从静默失效变为生效。
 5. `webhook.py`:`audit_branch` 缺省容错。
 
-测试 48 → 50 全绿(新增未知动作拒绝、非后代 fix_commit 拒绝两条回归)。
+另有 PI 认证的事件隔离修复路径(`POST /admin/quarantine-event`)、`parent_report_sha256`
+回执链,以及回执必须绑定策略包。测试 48 → 64 全绿。
+
+## 验证强度分级(不要越级引用)
+
+一次外部审计对同类系统的批评是:把"有审计日志"说成"由不变量保证的闭环受控系统"是逻辑越级。
+本项目的证据按强度分开陈述,不合并:
+
+| 强度 | 内容 |
+|---|---|
+| **机械证明** | controller 64 个单元测试;Tier-0 11 项检查在真实仓库上确定性可复现;干净克隆在陌生路径 install + 全套测试通过 |
+| **模拟端到端** | `selftest.py` 全链路 4/4,但 Codex 由 `--simulate-codex` 桩替代 |
+| **真实审计** | 5 轮真实 Codex 审计(1 轮生产 + 4 轮 mutation),每轮 ~316 万 input tokens |
+| **未验证** | **验证关闭路径(disposition → 修复 → 复审 → verified closure)从未用真实审计器跑通**。相关两处缺陷由推理+单元测试修复,不等于端到端成立。 |
+
+其他必须随结论一同引用的限制:
+
+- **Tier-0 覆盖率 11/27**:规则手册声明 27 个 `C-*`,已实现 11 个;其余 16 条规则纯靠 LLM 判断。
+- **`severity_floors` 是事后拟合的**:下限依据真实审计观测到的评级设定,是策略选择而非独立验证。
+- **假阳性率数据极弱**:`C-INJECT-001` / `C-NUM-001` 各只在一棵树上验证过无假阳性,n=1 几乎不排除任何东西。
+- **执行来源部分自述**:回执现已绑定策略包(宪法/规则手册/检查器哈希)与模型标识,但没有 provider
+  request ID 或独立 attestation,成本台账靠 cwd 匹配会话文件。
+- **策略包绑定的执行位置**:在编排器提交工件前校验。当前架构下 Codex 从不 push,编排器即闸门,
+  故此处足够;若将来允许 Codex 身份直接推送审计仓,该校验必须移入 controller。
 
 ## 已知边界(有意为之/待办)
 
-- controller 事件日志无修复接口:一条异常事件会永久 fail-closed(设计取向是安全而非可用);
-  本地单写者下可达路径已很窄。出现时删 `state/controller/state.json` 前先备份并通知 PI。
+- controller 事件日志的修复需 PI 介入:异常事件由 `POST /admin/quarantine-event`
+  (仅 `PI_APPROVAL_TOKEN`)隔离,append-only、从不删除事件;`GET /events` 列出可隔离的哈希。
 - GitHub 接线(2026-07-30):auditRepo → `dongzhaohe321418-lab/perovskite-screening-audit`
   (private),每次 FINAL 后自动 push;scienceRepo 以 GitHub 为真相源,每轮 pass fetch,
-  仅 fast-forward 同步并自动触发新 head 审计,发散/脏树只通知 PI 不动仓库
-  (`config.yaml` 的 `sync:` 开关)。建议在 GitHub 给 audit 分支加保护规则。
+  但**审计只读 `state/science-mirror.git` 镜像,绝不写 live 仓**;发散只通知 PI。
+  两仓均为 public,audit 分支已启用保护(禁强推/禁删除/强制线性历史)。
 - Tier-0 `C-TEST-001`(clean-clone 跑仓库自测)默认关闭,`checks/checks.yaml` 打开。
 - `claude` CLI 的 npm 原生二进制未签名被 macOS SIGKILL;闭环用 MCP 不依赖它,如需修复:
   `npm reinstall -g @anthropic-ai/claude-code`。

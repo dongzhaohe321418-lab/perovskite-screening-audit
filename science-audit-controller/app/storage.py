@@ -42,6 +42,7 @@ class JsonStorage:
         "audit_report_sha256",
         "audit_report_id",
         "audit_result",
+        "parent_report_sha256",
     }
 
     def __init__(self, path: str | Path | None = None):
@@ -211,11 +212,20 @@ class JsonStorage:
             if cycle_id not in state["cycles"]:
                 raise KeyError(f"unknown cycle: {cycle_id}")
             current = state["cycles"][cycle_id]
+            previous = [
+                Cycle(**value)
+                for value in state["cycles"].values()
+                if value.get("project_id") == current["project_id"]
+                and value.get("status") == CycleStatus.FINAL.value
+                and value.get("cycle_id") != cycle_id
+            ]
+            previous.sort(key=lambda item: item.cycle_id)
             proposed = {
                 "audit_repo_commit": audit_repo_commit,
                 "audit_report_sha256": audit_report_sha256,
                 "audit_report_id": audit_report_id,
                 "audit_result": audit_result,
+                "parent_report_sha256": previous[-1].audit_report_sha256 if previous else None,
             }
             if current.get("status") == CycleStatus.FINAL.value:
                 if all(current.get(key) == value for key, value in proposed.items()):
