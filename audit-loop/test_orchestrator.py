@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -51,3 +52,24 @@ def test_tier0_base_ignores_unfinalized_cycles(tmp_path):
                          "status": "CODEX_TASK_CREATED"},
     }
     assert make(tmp_path, cycles).tier0_base_commit() == "1" * 40
+
+
+def test_readme_counts_match_reality():
+    """R-NAV-003 applied to ourselves: a self-declared count must be true.
+
+    Three counts in the README drifted once check_action and C-TREESAFE-001
+    landed, and were caught by an agent reading the file rather than by anything
+    here. This pins them.
+    """
+    readme = (LOOP_ROOT / "README.md").read_text(encoding="utf-8")
+    tools = len(set(re.findall(
+        r'"(audit_status|get_pending_review|submit_disposition|request_audit'
+        r'|acknowledge_escalation|notify_pi|check_action)"',
+        (LOOP_ROOT / "mcp" / "audit_mcp_server.py").read_text(encoding="utf-8"))))
+    checks = len(re.findall(
+        r"^@check\(", (LOOP_ROOT / "checks" / "deterministic_checks.py").read_text(
+            encoding="utf-8"), re.MULTILINE))
+    assert f"{tools} 个工具" in readme, f"README does not state {tools} MCP tools"
+    assert f"{checks} 项 C-* 检查" in readme, f"README does not state {checks} Tier-0 checks"
+    assert f"Tier-0 {checks} 项检查" in readme
+    assert f"Tier-0 覆盖率 {checks}/27" in readme

@@ -5,10 +5,16 @@
 
 - server: `audit-loop/mcp/audit_mcp_server.py`
 - 协议: JSON-RPC 2.0 over stdio，newline-delimited，手写实现（不依赖任何 MCP SDK）
-- serverInfo: `{"name": "science-audit-loop", "version": "1.0.0"}`
+- serverInfo: `{"name": "science-audit-loop", "version": "1.1.0"}`
 - 依赖: 只用 stdlib + `audit-loop/.venv` 里已有的 `yaml` / `fastapi` / `httpx` / `jsonschema`
-- 六个 tool: `audit_status`、`get_pending_review`、`submit_disposition`、`request_audit`、
-  `acknowledge_escalation`、`notify_pi`
+- 七个 tool: `audit_status`、`get_pending_review`、`submit_disposition`、`request_audit`、
+  `acknowledge_escalation`、`notify_pi`、`check_action`
+
+> `check_action`（1.1 新增）让 controller 的 fail-closed 准入闸门 `POST /actions/check`
+> 第一次变得**可达**：在此之前系统里没有任何东西调用过该端点，MCP server 甚至不持有
+> `ACTION_API_TOKEN`，闸门形同虚设。**诚实的边界**：它在调用点是**建议性**的
+> （advisory）—— 可达、且每次咨询都记账，但**不是** enforcement：不调用它的 caller
+> 不会被它拦住。把它说成"强制"就等于把当初那个缺陷换个说法留下来。
 
 ---
 
@@ -83,7 +89,7 @@ printf '%s\n' \
   /Users/ericdong/Desktop/perovskite-project/audit-loop/mcp/audit_mcp_server.py 2>/dev/null
 ```
 
-应当得到两行 JSON：`initialize` 的 result，以及 6 个 tool 的列表。
+应当得到两行 JSON：`initialize` 的 result，以及 7 个 tool 的列表。
 （stderr 是日志，stdout 只有协议 JSON。）
 
 ---
@@ -92,16 +98,36 @@ printf '%s\n' \
 
 1. `audit-loop/.venv` 存在，且装了 `fastapi` / `httpx` / `jsonschema` / `PyYAML` 以及
    editable 安装的 `science-audit-controller`。
-2. `audit-loop/orchestrator/config.yaml` 存在，`paths.*` 指向真实位置。
-3. `install.sh` 已经跑过，生成了 `paths.secrets_env`（默认 `audit-loop/state/secrets.env`）。
-   该文件是 `KEY=VALUE` 每行一条，需要这些 key：
-   `GITHUB_WEBHOOK_SECRET`、`ACTION_API_TOKEN`、`CLAUDE_API_TOKEN`、`PI_APPROVAL_TOKEN`、
-   `CONTROLLER_READ_TOKEN`。
+2. `audit-loop/orchestrator/config.yaml` 存在，`paths.*` 指向真实位置；
+   `project.project_id` 非空（`check_action` 用它构造请求）。
+3. `install.sh` 已经跑过，生成了 `paths.secrets_env`（默认 `audit-loop/state/secrets.env`，
+   `KEY=VALUE` 每行一条）：`GITHUB_WEBHOOK_SECRET`、`ACTION_API_TOKEN`、
+   `CLAUDE_API_TOKEN`、`CONTROLLER_READ_TOKEN`。`PI_APPROVAL_TOKEN` **不在**这个文件里，
+   它单独放在 `state/pi_token.env`，没有任何自动化进程加载。
 
-**secrets.env 缺失时的行为**：`initialize` 与 `tools/list` 照常工作；`audit_status` 也照常
-渲染并把 secrets 标为 `MISSING`；真正需要 token 的 `submit_disposition` 返回
-`secrets.env missing — run install.sh first`。secret 的值从不出现在任何 tool 的输出里 ——
-`audit_status` 只报告 key 是否存在。
+### 2.1 本 server 持有哪些 token / least privilege
+
+`SECRET_KEYS` 是本 server 会读取并注入进程内 controller 的 key 集合。1.1 起是**两个**：
+
+| key | 用途 | 为什么是正当的 |
+| --- | --- | --- |
+| `CLAUDE_API_TOKEN` | `POST /claude/dispositions` | 处置通道：对已经写在自己头上的 findings 表态 |
+| `ACTION_API_TOKEN` | `POST /actions/check` | 闸门咨询通道：问"这个高风险动作被允许吗"。**问 ≠ 判**：该端点只读策略状态并返回 ALLOW/DENY，无法创建或放宽任何 authorization |
+
+仍然**故意不持有**：
+
+- `PI_APPROVAL_TOKEN` —— 对应 `POST /authorizations` 与 `POST /admin/quarantine-event`。
+  执行者若能自己签发批准、或把针对自己的 blocker 事件隔离掉，two-key 规则当场塌掉。
+  它连 `secrets.env` 都不在（见上）。
+- `CONTROLLER_READ_TOKEN` —— 本 server 从不使用。
+
+缺 token 的端点返回 503，这是**预期姿态**，不是配置错误。
+
+**secrets.env 缺失/不全时的行为**：`initialize` 与 `tools/list` 照常工作；`audit_status` 也
+照常渲染，并把缺失的 key 名字列出来（只报告 key 在不在，**从不**打印值）；真正需要该
+token 的 tool 返回 `isError: true` 的配置错误 —— `submit_disposition` 说
+`secrets.env has no CLAUDE_API_TOKEN`，`check_action` 说
+`secrets.env has no ACTION_API_TOKEN — run install.sh first (<path>)`。
 
 ---
 
@@ -123,6 +149,9 @@ printf '%s\n' \
 - pending review 的数量与 `cycle_id` 列表；
 - escalation：OPEN / ACKNOWLEDGED 计数，以及每条 OPEN 的 `escalation_id` / `finding_id` /
   `cycle_ids` / `opened_at`；
+- **gate consultations**：`state/action_ledger.jsonl` 里最近 5 条 `check_action` 记录
+  （时间、decision、action、截断到 64 字符的 reason codes）；一条都没有时明确说
+  `none recorded`；
 - 初始化状态：`secrets.env`、state dir、controller state、spool 队列长度。
 
 只读；不写任何文件。controller state 不存在时按空处理。
@@ -142,8 +171,13 @@ Cycles: 1 total, showing most recent 1
 Pending reviews: 0
 Escalations: 0 OPEN, 0 ACKNOWLEDGED (0 total)
 
+Gate consultations (check_action): 2 recorded, showing last 2
+  2026-07-30T13:50:10.481890+00:00 DENY   submit_production_job      ACTIVE_BLOCKER_F-001, ACTIVE_BLOCKER_F-002, ACTIVE_BLOCKER_F-...
+  2026-07-30T13:52:34.445107+00:00 DENY   submit_production_job      ACTIVE_BLOCKER_F-001, ACTIVE_BLOCKER_F-002, ACTIVE_BLOCKER_F-...
+  ledger: /Users/ericdong/Desktop/perovskite-project/audit-loop/state/action_ledger.jsonl
+
 Initialization:
-  secrets.env:      present, all 5 keys set
+  secrets.env:      present, all 2 keys set
   state dir:        present  (/Users/ericdong/Desktop/perovskite-project/audit-loop/state)
   controller state: present (1 cycles)
   spool:            present, 0 queued event(s)
@@ -303,6 +337,120 @@ osascript 失败（headless、通知权限被关等）视为**非致命**：日�
 `isError: false`，只在文本里标注 `macOS notification: osascript failed (non-fatal): ...`。
 日志写不进去才算 tool 失败 —— 那是唯一不能丢的那一份记录。
 
+### 3.7 `check_action`（1.1 新增：准入闸门咨询）
+
+在做**任何高风险动作之前**先问 controller 的 fail-closed policy engine
+（`POST /actions/check`）：允许还是不允许。
+
+| 参数 | 类型 | 必填 | 默认 | 说明 |
+| --- | --- | --- | --- | --- |
+| `action` | string，非空 | 是 | — | 要做的动作名，如 `submit_production_job`、`publish_claim` |
+| `science_commit` | string，`^[a-fA-F0-9]{40}$` | 否 | science repo 当前 HEAD | 该动作所依据的完整 40 位 sha |
+| `manifest_sha256` | string，`^[a-fA-F0-9]{64}$` | 否 | 该 commit 上 `.audit/audit_request.json` 里的 `evidence_manifest_sha256` | 证据清单哈希 |
+| `intent` | string，非空 | 否 | — | 一行说明你即将做什么；原样记进 ledger |
+
+`action` **故意不是 enum**：引擎必须看到你真正想做的那个名字，认不出就 DENY。
+
+**高风险动作**（`app/policy_engine.py` 的 `HIGH_RISK_ACTIONS`）：
+`submit_production_job`、`stop_production_job`、`publish_claim`、`change_locked_protocol`、
+`exclude_scientific_data`、`increase_budget`、`operate_instrument`。
+低风险白名单：`run_unit_tests`、`run_local_analysis`、`read_results`、
+`generate_report_draft`。**两者之外的任何名字一律 DENY（`UNKNOWN_ACTION`）** —— 这就是
+fail-closed 的默认，不是 bug。
+
+流程：
+
+1. 解析默认值：`git -C <science_repo> rev-parse HEAD`；
+   `git -C <science_repo> show <sha>:.audit/audit_request.json` → `evidence_manifest_sha256`。
+   **解析不出来就报错，绝不猜哈希**：commit 上没有 `.audit/audit_request.json`、JSON 坏了、
+   没有该字段、字段不是 64 位 hex、sha 不在 repo 里 —— 每一种都返回 `isError: true` 且
+   点名缺的到底是什么，并附一句 `no hash was guessed`。猜一个近似的 manifest 哈希会
+   悄悄废掉 `MANIFEST_MISMATCH` 这条检查。
+2. 以 `Authorization: Bearer <ACTION_API_TOKEN>` POST
+   `{project_id, actor: "claude_science", action, science_commit, manifest_sha256}`
+   到进程内 controller 的 `/actions/check`。`project_id` 取自 `config.yaml` 的
+   `project.project_id`；`actor` 恒为 `claude_science`（引擎的 allow-list 只有它）。
+3. 向 `<state_dir>/action_ledger.jsonl` **追加**一行 JSON（单次 `O_APPEND` 写；
+   append-only 的账本不做 tmp+replace 重写）：
+
+   ```json
+   {"action": "submit_production_job", "decision": "DENY",
+    "intent": "…", "manifest_sha256": "…", "reason_codes": ["…"],
+    "science_commit": "…", "source": "mcp", "timestamp": "<utc-iso>"}
+   ```
+
+4. 返回**可读文本**（不是 JSON dump）。
+
+**返回约定**：ALLOW 与 DENY 都是 `isError: false` —— DENY 是闸门正常工作的答案，不是
+tool 故障。只有"没拿到答案"（参数非法、默认值解析失败、缺 token、controller 报错）才是
+`isError: true`；这种情况下文本会说明**没有决定就等于不被允许，"没有 DENY" 不是 ALLOW**。
+若确实打到了 controller 但没拿到决定，ledger 里会多一条 `decision: "ERROR"` 且带
+`error` 字段的记录 —— 失败的咨询同样留痕。
+
+**DENY** 的正文以 `STOP — the policy gate returned DENY. Do NOT perform this action.` 开头，
+然后逐条列出 controller 原样返回的 reason code 加一行中文/英文白话解释。覆盖的 code
+（字符串取自 `app/policy_engine.py`，不是编出来的）：
+
+| reason code | 一句话含义 |
+| --- | --- |
+| `UNKNOWN_PROJECT` | 送出的 `project_id` 不是 controller 配置里的项目 |
+| `ACTOR_NOT_ALLOWED` | actor 不在引擎 allow-list 上 |
+| `BLOCKER_STATE_INCONSISTENT` | blocker 事件日志归约不出一致状态，引擎 fail-closed，等人修 |
+| `UNKNOWN_ACTION` | 引擎不认识这个动作名 → 默认拒绝（不要为了绕过它去编名字） |
+| `ACTIVE_BLOCKER_<finding_id>` | 该 finding 仍是 OPEN blocking，且 scope 覆盖本动作；只有修复→re-audit→`FINDING_VERIFIED_CLOSED` 才能解除 |
+| `NO_FINAL_AUDIT_FOR_COMMIT` | 这个 commit 没有任何 audit cycle 走到 FINAL |
+| `MANIFEST_MISMATCH` | 给的 manifest 哈希 ≠ 该 commit 的 FINAL 审计记录的那个 |
+| `AUDIT_DECISION_NOT_PERMISSIVE` | FINAL 审计的 decision 不是 `PASS` / `PASS_WITH_CAVEATS` |
+| `POLICY_APPROVAL_REQUIRED` | 没有 `policy_approved=true` 的未过期 authorization |
+| `BUDGET_APPROVAL_REQUIRED` | 没有 `budget_approved=true` 的未过期 authorization |
+| `PI_APPROVAL_REQUIRED` | 没有 `pi_approved=true` 的未过期 authorization；只有 PI 能签发，本 server 不持有 `PI_APPROVAL_TOKEN`，所以你**自己解不开**，要用 `notify_pi` 去问 |
+
+authorization 的匹配是**逐字**的：actor + action + science_commit + manifest_sha256 四项
+全等，且 `expires_at` 未过期。
+
+**ALLOW** 的正文会指名这次放行所依据的 FINAL cycle 与 commit，并写明这是"**仅**针对
+**这一个** action、**这一个** commit、**这一份** manifest 的一次授权"，不外延到别的动作、
+之后的 commit 或更大的范围。若该 commit 根本没有 FINAL cycle（引擎把这个动作归为
+低风险直接放行），文本会**照实说**这次 ALLOW 不依赖任何审计，别当成"审计批准过"。
+
+**它是什么、不是什么（必须照抄的边界）**：tool description 与每一次 ALLOW/DENY 正文都
+带这句话 ——
+
+> check_action is ADVISORY AT THE POINT OF CALL. The controller's fail-closed policy engine
+> makes the decision and this consultation is now on record in the append-only ledger — but
+> nothing here mechanically prevents an action. A caller that simply never calls check_action
+> is not stopped by it. Reachable and logged, not enforced.
+
+外部审计当初的结论是"**够不着的闸门等于没有闸门**"。1.1 修的是"够不着"和"没留痕"，
+不是"不可绕过"。把它描述成 enforcement 就是换个说法把原缺陷留下来。
+
+DENY 实例（真实 state，`submit_production_job` @ HEAD，节选）：
+
+```
+STOP — the policy gate returned DENY. Do NOT perform this action.
+
+action:          submit_production_job
+actor:           claude_science
+project_id:      perovskite-screening
+science_commit:  81fd505e71b8bde5faab169cb4c42b791f656949   [default: HEAD of …/scienceRepo]
+manifest_sha256: c546b4176ddf115ec90f5daf88ee8cece8a91e15d504d3b16b08307d402c5db4   [default: evidence_manifest_sha256 in .audit/audit_request.json @ commit]
+intent:          live smoke test of the admission gate; no job will be submitted
+asked at:        2026-07-30T13:52:34.445107+00:00
+
+Reason codes verbatim from the controller, each with a one-line gloss:
+  - ACTIVE_BLOCKER_F-001
+      finding F-001 is an OPEN blocking finding whose blocked_scopes cover this action; …
+  …
+  - AUDIT_DECISION_NOT_PERMISSIVE
+      the FINAL audit for this commit decided something other than PASS or PASS_WITH_CAVEATS …
+  - PI_APPROVAL_REQUIRED
+      … Only the PI can create one (POST /authorizations with PI_APPROVAL_TOKEN); this server
+      deliberately does not hold that token …
+
+What to do now:
+  * Do not retry with different arguments to hunt for an ALLOW, …
+```
+
 ---
 
 ## 4. 典型 session 收尾流程
@@ -316,6 +464,12 @@ audit_status
         ├─ 有 NEED_PI_DECISION / 被 block 住 ──► notify_pi
         ├─ 有 OPEN escalation 且已有人拍板 ──► acknowledge_escalation
         └─ 本 session 改动了 scienceRepo ──► request_audit(reason="...")
+
+任何高风险动作之前（提交生产任务、发布结论、改锁定协议、排除数据、加预算、操作仪器）：
+
+        check_action(action="...", intent="...")
+                ├─ DENY  ──► 停手；按 reason code 修根因，或 notify_pi 找 PI
+                └─ ALLOW ──► 只做这一个动作、只在这个 commit 上做一次，然后重新问
 ```
 
 对 `ACCEPT_AND_FIX`：**先**在 scienceRepo 提交修复、拿到新 sha，**再**把该 sha 作为
@@ -335,6 +489,7 @@ state 的所有者是 orchestrator；本 server 只按下表读写。所有写�
 | `<state_dir>/escalations.json` | **读-改-写**（flock + 原子替换），只改被 acknowledge 的那一条。 |
 | `<state_dir>/controller/state.json` | `audit_status` 只读（缺失按空处理）；`submit_disposition` 通过 controller 自己的 `JsonStorage` 间接写入。 |
 | `<state_dir>/logs/notifications.log` | **追加**一行。 |
+| `<state_dir>/action_ledger.jsonl` | **追加**一行（每次 `check_action` 一条）。append-only：单次 `O_APPEND` 写，**从不**用 tmp+replace 重写整个文件，也从不删改既有行。`audit_status` 只读它的最后几行。 |
 
 **绝不触碰**：`scienceRepo` 与 `auditRepo` 的工作区内容（只跑 `rev-parse` / `merge-base`
 这类只读 git 命令）。
@@ -344,7 +499,7 @@ state 的所有者是 orchestrator；本 server 只按下表读写。所有写�
 ## 6. 协议细节 / protocol notes
 
 - `initialize` → `{"protocolVersion": <回抄 client 请求的版本，缺省 "2025-06-18">,
-  "capabilities": {"tools": {}}, "serverInfo": {"name": "science-audit-loop", "version": "1.0.0"}}`
+  "capabilities": {"tools": {}}, "serverInfo": {"name": "science-audit-loop", "version": "1.1.0"}}`
 - `notifications/initialized` 及任何其它 notification（无 `id` 的消息）→ 不回任何东西。
 - `tools/list` → `{"tools": [...]}`，每个都有 `name` / `description` / `inputSchema`
   （JSON Schema，Draft 2020-12，已用 `jsonschema.check_schema` 验证）。
@@ -375,6 +530,10 @@ state 的所有者是 orchestrator；本 server 只按下表读写。所有写�
 | `request_audit` 报 `make_audit_request.py not found` | orchestrator 还没装好；临时可用 `regenerate_manifest=false`。 |
 | `request_audit` 报 `is not on branch main` | 当前 HEAD 不在 science 分支上；先 merge / checkout 回该分支。 |
 | 看不到桌面通知 | `notify_pi` 的文本里会写明 osascript 的失败原因；`notifications.log` 里始终有记录。 |
+| `check_action` 报 `secrets.env has no ACTION_API_TOKEN` | `install.sh` 没跑过，或该 key 被清空了。`initialize`/`tools/list`/`audit_status` 不受影响。 |
+| `check_action` 报 `cannot resolve the default manifest_sha256` | 该 commit 上没有 `.audit/audit_request.json`（先跑 `request_audit` 生成），或那个 sha 不属于这个 repo。想手动指定就显式传 `manifest_sha256`——**不要**随便填一个凑数的哈希。 |
+| `check_action` 报 `HTTP 401` / `HTTP 503` | 401：`secrets.env` 的 `ACTION_API_TOKEN` 与 controller 用的不一致；503：controller 进程没配 `ACTION_API_TOKEN`。两种都**不是** ALLOW。 |
+| `check_action` 一直 DENY 且带 `ACTIVE_BLOCKER_*` | 有 OPEN 的 blocking finding。只有"提交修复 → re-audit → controller 记下 `FINDING_VERIFIED_CLOSED`"才解除，自己声称修好了不算。 |
 | 想看 server 日志 | 全在 stderr。client 通常会落盘（Claude Desktop: `~/Library/Logs/Claude/mcp*.log`）。 |
 
 ---
@@ -382,13 +541,28 @@ state 的所有者是 orchestrator；本 server 只按下表读写。所有写�
 ## 8. 自测 / self-test
 
 server 是纯 stdio 进程，可以直接用管道驱动。已验证过的端到端测试覆盖：
-`initialize` 握手（含版本回抄与缺省）、`tools/list` 的 6 个 tool 与 schema 合法性、
+`initialize` 握手（含版本回抄与缺省）、`tools/list` 的 7 个 tool 与 schema 合法性
+（`jsonschema.Draft202012Validator.check_schema`）、
 未知 method / 未知 tool、`audit_status` 渲染、`get_pending_review` 全文嵌入、
 `submit_disposition` 的拒绝路径（controller error 列表原文）与接受路径
 （pending review 移动 + spool 事件 + controller 里逐字记录）、`request_audit` 的
 `regenerate_manifest=false` 路径与非分支 commit 拒绝、`acknowledge_escalation` 往返与
 重复确认拒绝、`notify_pi` 的日志行、secrets.env 缺失时 `initialize`/`tools/list`/`audit_status`
 仍可用，以及 stdout 全程只有 JSON-RPC 行。
+
+`check_action` 另外验证过（scratch tree，56/56 通过）：高风险动作在没有 FINAL 审计时
+DENY 且带 `NO_FINAL_AUDIT_FOR_COMMIT` 并**恰好**写一行 ledger；未知动作名 DENY 且带
+`UNKNOWN_ACTION`（确认不是 ALLOW）；只给 `action` 时默认值确实取到 HEAD 与
+`.audit/audit_request.json` 里的 manifest 哈希；commit 上没有 `.audit/audit_request.json`
+（以及有文件但缺 `evidence_manifest_sha256` 字段）时返回点名的错误、**不写** ledger、
+不编哈希；低风险动作 ALLOW 时照实说明"不依赖任何审计 cycle"；有 FINAL PASS cycle +
+未过期完整 authorization 时 ALLOW 并指名该 cycle；`secrets.env` 缺 `ACTION_API_TOKEN` 时
+给出配置错误而 `initialize`/`tools/list` 照常。
+
+真实 config 上只做过只读冒烟：`check_action(action="submit_production_job")` → DENY
+（`ACTIVE_BLOCKER_F-001/002/003/004/006`、`AUDIT_DECISION_NOT_PERMISSIVE`、
+`POLICY_/BUDGET_/PI_APPROVAL_REQUIRED`），除了它自己该写的那一行 ledger 之外，
+`state/` 没有任何其它文件被新增或改动。
 
 跑自测的方式：复制一份 `config.yaml` 到 scratch 目录、把 `paths.*` 改到 scratch
 （scratch state_dir + scratch git repos + 假的 `secrets.env` + 假的

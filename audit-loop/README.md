@@ -69,9 +69,9 @@ manifest 相符、无适用 blocker、且 PI 授权未过期。Claude Science �
 | 路径 | 作用 |
 |---|---|
 | `rulebook/` | 宪法(逐字)+ 机器可解析规则索引 `AUDIT_RULEBOOK.md`(31 条 R-* 规则,从属宪法)+ 两个 lock 文件 |
-| `checks/` | Tier-0 确定性检查(11 项 C-* 检查,stdlib+yaml,无 LLM) |
+| `checks/` | Tier-0 确定性检查(12 项 C-* 检查,stdlib+yaml,无 LLM) |
 | `orchestrator/` | `orchestrator.py`(调度核心)、`make_audit_request.py`(代 Claude Science 重生成 `.audit/`)、`config.yaml`、`projects.yaml` |
-| `mcp/` | Claude Science 的 local MCP server(6 个工具,注册方法见 `mcp/README_MCP.md`) |
+| `mcp/` | Claude Science 的 local MCP server(7 个工具,含准入闸门 `check_action`;注册方法见 `mcp/README_MCP.md`) |
 | `mutation_test.py` | 对抗性测试:注入已知缺陷,跑真实审计,看是否被抓到 |
 | `hooks/` `launchd/` `install.sh` | 触发装置;`selftest.py` 在 scratch 克隆里跑全链路 |
 | `state/` | spool、cycles、worktrees、pending_reviews、controller state、secrets.env(600)、日志 |
@@ -119,14 +119,14 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ericdong.audit-loop.
 
 | 强度 | 内容 |
 |---|---|
-| **机械证明** | controller 66 个单元测试 + 编排器 3 个单元测试;Tier-0 11 项检查在真实仓库上确定性可复现;干净克隆在陌生路径 install + 全套测试通过 |
+| **机械证明** | controller 66 个单元测试 + 编排器 3 个单元测试;Tier-0 12 项检查在真实仓库上确定性可复现;干净克隆在陌生路径 install + 全套测试通过 |
 | **模拟端到端** | `selftest.py` 全链路 4/4,但 Codex 由 `--simulate-codex` 桩替代 |
 | **真实审计** | 5 轮真实 Codex 审计(1 轮生产 + 4 轮 mutation),每轮 ~316 万 input tokens |
 | **未验证** | **验证关闭路径(disposition → 修复 → 复审 → verified closure)从未用真实审计器跑通**。相关两处缺陷由推理+单元测试修复,不等于端到端成立。 |
 
 其他必须随结论一同引用的限制:
 
-- **Tier-0 覆盖率 11/27**:规则手册声明 27 个 `C-*`,已实现 11 个;其余 16 条规则纯靠 LLM 判断。
+- **Tier-0 覆盖率 12/27**:规则手册声明 27 个 `C-*`,已实现 11 个;其余 15 条规则纯靠 LLM 判断。
 - **`severity_floors` 是事后拟合的**:下限依据真实审计观测到的评级设定,是策略选择而非独立验证。
 - **假阳性率数据极弱**:`C-INJECT-001` / `C-NUM-001` 各只在一棵树上验证过无假阳性,n=1 几乎不排除任何东西。
 - **执行来源部分自述**:回执已绑定策略包(宪法/规则手册/检查器哈希)、模型标识与
