@@ -286,6 +286,10 @@ class Orchestrator:
             return False
         if self._rate_limited():
             return True
+        stalled = self._awaiting_disposition()
+        if stalled:
+            self._note_deferral(stalled, sha)
+            return True
 
         parents = sh(["git", "rev-list", "--parents", "-n", "1", sha],
                      cwd=self.science_repo).stdout.split()
@@ -316,6 +320,46 @@ class Orchestrator:
             return False
         self.run_audit_cycle(cycle_id, sha)
         return False
+
+    def _awaiting_disposition(self) -> str | None:
+        """The FINAL cycle whose findings Claude Science has not answered yet.
+
+        Constitution 3.1/3.5 sequences a cycle as audit -> disposition -> next
+        cycle. Enforcing that here also closes a race: a fix commit's own cycle
+        must not reach FINAL before the disposition naming that commit is
+        recorded, or no re-audit is registered and the closure is rejected.
+        """
+        for cycle_id, cycle in sorted(self.controller_state().get("cycles", {}).items()):
+            if cycle.get("status") != "FINAL":
+                continue
+            if not (cycle.get("audit_result") or {}).get("findings"):
+                continue
+            if cycle.get("disposition_status") != "RECORDED":
+                return cycle_id
+        return None
+
+    def _note_deferral(self, cycle_id: str, sha: str) -> None:
+        """Defer quietly, but escalate once if the handoff stays stalled."""
+        marker = self.state_dir / "deferrals.json"
+        try:
+            record = json.loads(marker.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            record = {}
+        entry = record.get(cycle_id) or {"first_seen": now_iso(), "notified": False}
+        hours = float(self.cfg["limits"].get("stalled_disposition_hours", 12))
+        first = dt.datetime.fromisoformat(entry["first_seen"])
+        age_hours = (dt.datetime.now(UTC) - first).total_seconds() / 3600
+        log(f"deferring {sha[:12]}: {cycle_id} awaits Claude Science disposition "
+            f"({age_hours:.1f}h)")
+        if age_hours >= hours and not entry["notified"]:
+            entry["notified"] = True
+            self.notify("Audit Loop: handoff stalled",
+                        f"{cycle_id} has awaited a disposition for {age_hours:.0f}h; "
+                        "new science commits are queued, not audited")
+        record[cycle_id] = entry
+        tmp = marker.with_suffix(".tmp")
+        tmp.write_text(json.dumps(record, indent=2), encoding="utf-8")
+        tmp.replace(marker)
 
     def _cycle_for_commit(self, sha: str) -> tuple[str | None, str | None]:
         for cycle_id, cycle in sorted(self.controller_state().get("cycles", {}).items()):

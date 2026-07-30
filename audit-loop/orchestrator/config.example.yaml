@@ -36,6 +36,9 @@ limits:
   # Constitution 3.4: anti-infinite-loop rails.
   max_cycles_per_hour: 4
   escalate_after_unresolved_cycles: 3
+  # A new science commit is queued, not audited, while an earlier FINAL cycle's
+  # findings are unanswered (constitution 3.1). Notify if that stalls this long.
+  stalled_disposition_hours: 12
 
 notifications:
   macos: true
