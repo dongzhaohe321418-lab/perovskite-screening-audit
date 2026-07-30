@@ -49,12 +49,13 @@ _LOOP_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = str(_LOOP_ROOT / "orchestrator" / "config.yaml")
 FALLBACK_PROJECTS_YAML = str(_LOOP_ROOT / "orchestrator" / "projects.yaml")
 
+# Least privilege: this server submits dispositions on Claude Science's behalf and
+# nothing else. It must not hold PI_APPROVAL_TOKEN — an executor able to authorize
+# its own high-risk action would collapse the two-key rule — nor the action or read
+# tokens it never uses. Endpoints whose token is absent answer 503, which is the
+# intended posture rather than a misconfiguration.
 SECRET_KEYS = (
-    "GITHUB_WEBHOOK_SECRET",
-    "ACTION_API_TOKEN",
     "CLAUDE_API_TOKEN",
-    "PI_APPROVAL_TOKEN",
-    "CONTROLLER_READ_TOKEN",
 )
 
 DISPOSITION_VALUES = (

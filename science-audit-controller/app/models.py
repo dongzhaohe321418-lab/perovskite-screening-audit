@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
@@ -117,6 +119,43 @@ class BlockerEvent(BaseModel):
     blocked_scopes: list[str] = Field(default_factory=list)
     timestamp: str = Field(default_factory=utc_now)
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+def blocker_event_sha256(event: BlockerEvent) -> str:
+    """The canonical identity of one appended blocker event.
+
+    Every component that names an individual event - the reducer's diagnostics,
+    the stored quarantine records, and the read endpoint - must agree on this
+    byte sequence.
+    """
+
+    canonical = json.dumps(
+        event.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
+
+
+class BlockerEventRecord(BaseModel):
+    index: int
+    event_sha256: str
+    event: BlockerEvent
+
+
+class BlockerEventQuarantine(BaseModel):
+    project_id: str = Field(min_length=1)
+    event_sha256: str
+    reason: str = Field(min_length=1)
+    approved_by: str = Field(min_length=1)
+    created_at: str = Field(default_factory=utc_now)
+
+    @field_validator("event_sha256")
+    @classmethod
+    def validate_event_hash(cls, value: str) -> str:
+        if len(value) != 64 or any(char not in "0123456789abcdefABCDEF" for char in value):
+            raise ValueError("event_sha256 must be a 64-character hexadecimal SHA-256")
+        return value.lower()
 
 
 class ValidationResult(BaseModel):

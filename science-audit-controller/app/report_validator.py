@@ -132,7 +132,11 @@ class ReportValidator:
                 )
             )
 
-        blocker_state = reduce_blockers(self.storage.event_log(), project_id)
+        blocker_state = reduce_blockers(
+            self.storage.event_log(),
+            project_id,
+            quarantined=self.storage.quarantined_event_hashes(project_id),
+        )
         if blocker_state.fail_closed:
             errors.append("blocker event state is inconsistent")
         if audit_result is not None and not blocker_state.fail_closed:
@@ -514,7 +518,11 @@ class ClaudeDispositionValidator:
             return ValidationResult(valid=False, errors=errors)
 
         events: list[BlockerEvent] = []
-        blocker_state = reduce_blockers(self.storage.event_log(), cycle.project_id)
+        blocker_state = reduce_blockers(
+            self.storage.event_log(),
+            cycle.project_id,
+            quarantined=self.storage.quarantined_event_hashes(cycle.project_id),
+        )
         if blocker_state.fail_closed:
             self.storage.mark_disposition_invalid(cycle.cycle_id)
             return ValidationResult(valid=False, errors=["blocker event state is inconsistent"])

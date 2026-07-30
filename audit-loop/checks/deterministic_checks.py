@@ -14,9 +14,10 @@ NO SCIENTIFIC JUDGMENT
 ----------------------
 Every check in this file is a PROCESS invariant: file existence, byte-level hash
 identity, JSON well-formedness, history shape, link resolvability, banner presence,
-config-declared pattern contradictions, and the exit status of the repository's own
-declared test entrypoint. Nothing here evaluates whether a physical result is correct,
-well-chosen, converged-enough, or believable. Where domain vocabulary is needed (status
+config-declared pattern contradictions, config-declared agreement between a number
+published in prose and the machine-readable artifact that same document cites, and the
+exit status of the repository's own declared test entrypoint. Nothing here evaluates
+whether a physical result is correct, well-chosen, converged-enough, or believable. Where domain vocabulary is needed (status
 words, banner text, manifest key names), it lives in ``checks.yaml`` as data. Adding
 domain knowledge to this file is a defect.
 
@@ -1042,6 +1043,316 @@ def c_state_001(ctx: Ctx) -> dict[str, Any]:
             f"{ctx.audited_commit} -- {' '.join(shlex.quote(g) for g in (probe.get('scope_globs') or ['.']))}"
         )
     return result("FAIL" if violations else "PASS", detail, repro, violations)
+
+
+# --------------------------------------------------------------------------------------
+# numeric assertions (C-NUM-001)
+# --------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class NumericAssertion:
+    """One config-declared agreement between a document and the artifact it cites."""
+
+    aid: str
+    doc: str
+    pattern: str
+    source: str
+    pointer: str
+    tolerance: float
+    occurrence: str
+    rx: re.Pattern[str]
+
+
+# Typography only: a Unicode MINUS SIGN (U+2212) in a captured number is read as ASCII "-",
+# and non-breaking / thin spaces are dropped. Those are rendering differences, not value
+# differences: no other character is ever rewritten and no rounding is ever applied.
+NUM_TRANSLATE = {0x2212: "-", 0x00A0: None, 0x2009: None, 0x202F: None}
+
+# Both one-liners are pasted inside single quotes by the reproduce builder, so they must
+# contain no single quote of their own; the pattern / pointer arrive as argv, never inlined.
+NUM_DOC_EXTRACT_PY = (
+    "import re,sys;rx=re.compile(sys.argv[1]);"
+    "print([(i,m.group(1)) for i,l in enumerate(sys.stdin.read().splitlines(),1) "
+    "for m in rx.finditer(l)])"
+)
+NUM_POINTER_PY = (
+    "import functools,json,sys;print(functools.reduce("
+    "lambda n,s: n[int(s)] if isinstance(n,list) else n[s], "
+    'sys.argv[1].split("."), json.load(sys.stdin)))'
+)
+
+
+def parse_numeric_assertion(raw: Any, seen_ids: set[str]) -> tuple[NumericAssertion | None, str]:
+    """Validate one configured entry; returns (entry, reason-it-was-rejected)."""
+    if not isinstance(raw, dict):
+        return None, f"entry is {type(raw).__name__}, not a mapping"
+    aid = str(raw.get("id") or "").strip()
+    if not aid:
+        return None, "no id"
+    if aid in seen_ids:
+        return None, f"id {aid!r} is already used by an earlier entry"
+    doc = norm_repo_path(str(raw.get("doc") or ""))
+    source = norm_repo_path(str(raw.get("source") or ""))
+    if not doc or not source:
+        return None, f"{aid}: doc and source must both be repo-relative paths inside the repo"
+    pattern = raw.get("pattern")
+    if not isinstance(pattern, str) or not pattern:
+        return None, f"{aid}: pattern must be a non-empty string"
+    try:
+        rx = re.compile(pattern)
+    except re.error as exc:
+        return None, f"{aid}: pattern does not compile ({exc})"
+    if rx.groups != 1:
+        return None, f"{aid}: pattern must have exactly one capture group, it has {rx.groups}"
+    pointer = str(raw.get("pointer") or "").strip()
+    if not pointer or any(seg == "" for seg in pointer.split(".")):
+        return None, f"{aid}: pointer must be a non-empty dot path"
+    tolerance = raw.get("tolerance", 0)
+    if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)) or tolerance < 0:
+        return None, f"{aid}: tolerance must be a number >= 0, got {tolerance!r}"
+    occurrence = str(raw.get("occurrence") or "all")
+    if occurrence not in {"all", "first"}:
+        return None, f"{aid}: occurrence must be 'all' or 'first', got {occurrence!r}"
+    return (
+        NumericAssertion(
+            aid=aid,
+            doc=doc,
+            pattern=pattern,
+            source=source,
+            pointer=pointer,
+            tolerance=float(tolerance),
+            occurrence=occurrence,
+            rx=rx,
+        ),
+        "",
+    )
+
+
+def resolve_json_pointer(doc: Any, pointer: str) -> tuple[bool, Any]:
+    """Walk a dot path; an integer segment indexes a list. Returns (resolved, value)."""
+    node = doc
+    for segment in pointer.split("."):
+        if isinstance(node, list):
+            if not re.fullmatch(r"-?[0-9]+", segment):
+                return False, None
+            index = int(segment)
+            if not -len(node) <= index < len(node):
+                return False, None
+            node = node[index]
+            continue
+        if isinstance(node, dict) and segment in node:
+            node = node[segment]
+            continue
+        return False, None
+    return True, node
+
+
+def num_as_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.translate(NUM_TRANSLATE).strip())
+        except ValueError:
+            return None
+    return None
+
+
+def num_literal(value: Any) -> str:
+    return json.dumps(value) if isinstance(value, (int, float)) else str(value)
+
+
+def num_violation(
+    path: str, message: str, expected: Any, actual: Any, reproduce: str
+) -> dict[str, Any]:
+    """A violation plus its own reproduce command (this check reports per-assertion)."""
+    record = violation(path, message, expected, actual)
+    record["reproduce"] = reproduce
+    return record
+
+
+def num_reproduce(ctx: Ctx, entry: NumericAssertion) -> str:
+    """Re-derive both sides: every doc match with its line number, and the pointer value."""
+    show = f"git --git-dir={ctx.gd()} show {ctx.audited_commit}"
+    return (
+        f"{show}:{shlex.quote(entry.doc)} | python3 -c {shlex.quote(NUM_DOC_EXTRACT_PY)} "
+        f"{shlex.quote(entry.pattern)} ; "
+        f"{show}:{shlex.quote(entry.source)} | python3 -c {shlex.quote(NUM_POINTER_PY)} "
+        f"{shlex.quote(entry.pointer)}"
+    )
+
+
+def num_exists_reproduce(ctx: Ctx, entry: NumericAssertion) -> str:
+    paths = " ".join(shlex.quote(p) for p in (entry.doc, entry.source))
+    return (
+        f"for p in {paths}; do git --git-dir={ctx.gd()} show {ctx.audited_commit}:\"$p\" "
+        f">/dev/null 2>&1 && echo \"exists: $p\" || echo \"missing: $p\"; done"
+    )
+
+
+@check("C-NUM-001", "Verify config-declared numbers in prose against the artifact they cite", "HARD")
+def c_num_001(ctx: Ctx) -> dict[str, Any]:
+    """Assert that two committed files agree on a number, nothing more.
+
+    Each ``numeric_assertions`` entry names a document, a regex with exactly one capture
+    group over that document, a JSON artifact and a dot path into it. The captured number
+    must equal the pointed-at number within an absolute tolerance. This is a pure
+    consistency assertion between two files at one commit: it never judges whether either
+    number is scientifically right, only whether the repository contradicts itself. A
+    silently-dead assertion (pattern matching nothing) is itself reported, so an assertion
+    cannot stop working unnoticed.
+    """
+    raw_entries = ctx.config.get("numeric_assertions") or []
+    config_probe = f"grep -n numeric_assertions {shlex.quote(ctx.config_path)}"
+    if not isinstance(raw_entries, list) or not raw_entries:
+        return result(
+            "SKIP",
+            "numeric_assertions is absent or empty in the config, so no published number was "
+            "cross-checked against the artifact its document cites.",
+            reproduce=config_probe,
+        )
+
+    violations: list[dict[str, Any]] = []
+    evaluated = 0
+    compared = 0
+    first_repro = ""
+    seen_ids: set[str] = set()
+    for index, raw in enumerate(raw_entries):
+        entry, reason = parse_numeric_assertion(raw, seen_ids)
+        if entry is None:
+            violations.append(
+                num_violation(
+                    f"<numeric_assertions[{index}]>",
+                    "assertion entry is malformed",
+                    expected="id, doc, pattern (one capture group), source, pointer",
+                    actual=reason,
+                    reproduce=config_probe,
+                )
+            )
+            continue
+        seen_ids.add(entry.aid)
+        evaluated += 1
+        repro = num_reproduce(ctx, entry)
+
+        doc_text = ctx.git_show_text(entry.doc)
+        source_raw = ctx.git_show_bytes(entry.source)
+        missing = [
+            path
+            for path, present in ((entry.doc, doc_text is not None), (entry.source, source_raw is not None))
+            if not present
+        ]
+        if missing:
+            exists_repro = num_exists_reproduce(ctx, entry)
+            first_repro = first_repro or exists_repro
+            violations.append(
+                num_violation(
+                    entry.doc,
+                    f"{entry.aid}: declared source/doc missing",
+                    expected=f"both {entry.doc} and {entry.source} tracked at the audited commit",
+                    actual=f"not at the audited commit: {', '.join(missing)}",
+                    reproduce=exists_repro,
+                )
+            )
+            continue
+        assert doc_text is not None and source_raw is not None
+
+        try:
+            source_doc = json.loads(source_raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as exc:
+            first_repro = first_repro or repro
+            violations.append(
+                num_violation(
+                    entry.source,
+                    f"{entry.aid}: declared source did not parse as JSON",
+                    expected="a JSON document (see C-JSON-001)",
+                    actual=str(exc)[:200],
+                    reproduce=repro,
+                )
+            )
+            continue
+
+        resolved, node = resolve_json_pointer(source_doc, entry.pointer)
+        expected_value = num_as_float(node) if resolved else None
+        if expected_value is None:
+            first_repro = first_repro or repro
+            violations.append(
+                num_violation(
+                    entry.source,
+                    f"{entry.aid}: pointer does not resolve",
+                    expected=f"a number at {entry.pointer} in {entry.source}",
+                    actual=(
+                        f"resolved to {type(node).__name__} {num_literal(node)[:80]}, not a number"
+                        if resolved
+                        else "no such key or index"
+                    ),
+                    reproduce=repro,
+                )
+            )
+            continue
+
+        matches = [
+            (lineno, match.group(1))
+            for lineno, line in enumerate(doc_text.splitlines(), start=1)
+            for match in entry.rx.finditer(line)
+        ]
+        if not matches:
+            first_repro = first_repro or repro
+            violations.append(
+                num_violation(
+                    entry.doc,
+                    f"{entry.aid}: assertion pattern matched nothing",
+                    expected=f"at least one match of /{entry.pattern}/ in {entry.doc}",
+                    actual="zero matches, so the assertion no longer checks anything",
+                    reproduce=repro,
+                )
+            )
+            continue
+        if entry.occurrence == "first":
+            matches = matches[:1]
+
+        for lineno, captured in matches:
+            compared += 1
+            actual_value = num_as_float(captured)
+            if actual_value is None:
+                first_repro = first_repro or repro
+                violations.append(
+                    num_violation(
+                        entry.doc,
+                        f"{entry.aid}: line {lineno} capture is not a number",
+                        expected=f"the capture group of /{entry.pattern}/ to be numeric",
+                        actual=captured[:120],
+                        reproduce=repro,
+                    )
+                )
+                continue
+            if abs(actual_value - expected_value) <= entry.tolerance:
+                continue
+            first_repro = first_repro or repro
+            violations.append(
+                num_violation(
+                    entry.doc,
+                    f"{entry.aid}: line {lineno} states a number that disagrees with "
+                    f"{entry.source} at {entry.pointer} (absolute tolerance "
+                    f"{num_literal(entry.tolerance)})",
+                    expected=num_literal(node),
+                    actual=captured,
+                    reproduce=repro,
+                )
+            )
+
+    detail = (
+        f"Compared {compared} number(s) captured from prose by {evaluated} configured "
+        f"numeric_assertion(s) against the JSON pointer each document cites, both read at the "
+        f"audited commit; {len(violations)} disagreement(s). Agreement between two committed "
+        f"files only: no number is judged for scientific correctness."
+    )
+    if not violations and evaluated:
+        first_entry, _ = parse_numeric_assertion(raw_entries[0], set())
+        first_repro = num_reproduce(ctx, first_entry) if first_entry else config_probe
+    return result("FAIL" if violations else "PASS", detail, first_repro or config_probe, violations)
 
 
 @check("C-SCOPE-001", "Report changed paths outside the declared audit scope", "SOFT")

@@ -37,7 +37,11 @@ class PolicyEngine:
         if request.actor not in ALLOWED_ACTORS:
             return ActionCheckResponse(decision="DENY", reason_codes=["ACTOR_NOT_ALLOWED"])
 
-        blocker_state = reduce_blockers(self.storage.event_log(), project_id=request.project_id)
+        blocker_state = reduce_blockers(
+            self.storage.event_log(),
+            project_id=request.project_id,
+            quarantined=self.storage.quarantined_event_hashes(request.project_id),
+        )
         if blocker_state.fail_closed:
             return ActionCheckResponse(
                 decision="DENY",

@@ -161,7 +161,11 @@ class CycleManager:
         return findings
 
     def _record_reaudit_events(self, cycle: Cycle) -> None:
-        state = reduce_blockers(self.storage.event_log(), cycle.project_id)
+        state = reduce_blockers(
+            self.storage.event_log(),
+            cycle.project_id,
+            quarantined=self.storage.quarantined_event_hashes(cycle.project_id),
+        )
         if state.fail_closed:
             return
         events = [

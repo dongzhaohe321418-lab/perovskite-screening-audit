@@ -25,6 +25,32 @@ codex:
   args: ["exec", "--skip-git-repo-check", "--sandbox", "workspace-write", "--color", "never"]
   timeout_seconds: 5400
   max_retries: 1
+  # Prior real audit transcripts in rulebook/calibration/ are injected as reference
+  # material (depth and format only, no authority). Cap what reaches the prompt.
+  calibration_max_chars: 400000
+
+# Machine truth fixes the floor for anything a script proved. Measured across four
+# real audits of one tree, the same proven defect was graded CRITICAL in some runs
+# and HIGH in others, so severity is not a reproducible LLM output. Every Tier-0
+# HARD failure must be cited by a finding graded at or above its floor, and any
+# such failure forces BLOCK. Judgment findings remain the auditor's to grade.
+severity_floors:
+  default: HIGH
+  C-HASH-001: CRITICAL     # a declared hash that resolves to nothing
+  C-HASH-002: CRITICAL     # a manifest naming a path that does not exist
+  C-INJECT-001: CRITICAL   # audited content trying to direct the auditor
+
+retention:
+  # Cycle directories hold Codex's scratch clones; one measured 49 MB, so an
+  # unpruned loop grows without bound. Artifacts themselves live in the audit repo.
+  keep_cycles: 20
+  purge_temp_dirs: true
+
+budget:
+  # One measured cycle cost ~3.16M input tokens. Recorded per cycle in
+  # state/cost_ledger.jsonl; exceeding the monthly cap defers new audits.
+  max_input_tokens_per_month: 120000000
+  enforce: true
 
 sync:
   # GitHub is the source of truth for the science repo: fast-forward-only pulls

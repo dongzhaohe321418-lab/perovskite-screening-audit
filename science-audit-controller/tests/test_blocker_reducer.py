@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.blocker_reducer import reduce_blockers
-from app.models import BlockerEvent
+from app.models import BlockerEvent, blocker_event_sha256
 
 
 def test_blocker_reducer_derives_verified_closed_state():
@@ -69,3 +69,59 @@ def test_blocker_reducer_fails_closed_on_inconsistent_state():
     )
 
     assert state.fail_closed
+
+
+def test_fail_closed_error_names_the_canonical_event_hash():
+    poison = BlockerEvent(
+        event="FINDING_VERIFIED_CLOSED",
+        finding_id="F-404",
+        project_id="perovskite-screening",
+    )
+
+    state = reduce_blockers([poison], "perovskite-screening")
+
+    assert state.errors == [
+        f"close without open finding for F-404 (event_sha256={blocker_event_sha256(poison)})"
+    ]
+
+
+def test_quarantined_event_is_skipped_and_cannot_fail_closed():
+    opened = BlockerEvent(
+        event="FINDING_OPENED",
+        finding_id="F-001",
+        project_id="perovskite-screening",
+        data={"blocking": True},
+    )
+    poison = BlockerEvent(
+        event="FINDING_VERIFIED_CLOSED",
+        finding_id="F-404",
+        project_id="perovskite-screening",
+    )
+    events = [opened, poison]
+
+    unquarantined = reduce_blockers(events, "perovskite-screening")
+    repaired = reduce_blockers(
+        events,
+        "perovskite-screening",
+        quarantined={blocker_event_sha256(poison)},
+    )
+
+    assert unquarantined.fail_closed
+    assert not repaired.fail_closed
+    assert repaired.errors == []
+    assert "F-001" in repaired.active
+
+
+def test_quarantine_can_remove_an_event_that_carries_no_project_id():
+    poison = BlockerEvent(event="FINDING_OPENED", finding_id="F-001")
+
+    unquarantined = reduce_blockers([poison], "perovskite-screening")
+    repaired = reduce_blockers(
+        [poison],
+        "perovskite-screening",
+        quarantined=frozenset({blocker_event_sha256(poison)}),
+    )
+
+    assert unquarantined.fail_closed
+    assert not repaired.fail_closed
+    assert repaired.findings == {}

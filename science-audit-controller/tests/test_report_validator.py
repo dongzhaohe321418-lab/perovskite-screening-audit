@@ -6,6 +6,7 @@ from app.blocker_reducer import reduce_blockers
 from app.claude_adapter import ClaudeAdapter
 from app.codex_adapter import CodexAdapter
 from app.cycle_manager import CycleManager
+from app.models import BlockerEventQuarantine, blocker_event_sha256
 from app.report_validator import ClaudeDispositionValidator, ReportValidator
 
 from tests.test_cycle_manager import make_cycle, validate_artifacts
@@ -41,6 +42,24 @@ def final_blocked_cycle(tmp_path):
     )
     assert result.valid
     return storage, fake, storage.get_cycle(cycle.cycle_id)
+
+
+def pending_cycle_at_commit(storage, fake, science_commit):
+    fake.existing_commits.add(science_commit)
+    fake.files[("science", science_commit, ".audit/audit_request.json")] = json.dumps(
+        valid_audit_request()
+    )
+    manager = CycleManager(
+        storage,
+        fake,
+        CodexAdapter(storage, ROOT / "prompts"),
+        ROOT / "schemas",
+    )
+    return manager.handle_science_push(
+        "perovskite-screening",
+        "perovskite-screening",
+        science_commit,
+    )
 
 
 def disposition_for(cycle, findings):
@@ -305,3 +324,37 @@ def test_fix_commit_marks_existing_open_cycle_as_the_reaudit(tmp_path):
     state = reduce_blockers(storage.event_log(), first_cycle.project_id)
     assert state.reaudit_cycles["F-001"] == second_cycle.cycle_id
     assert not state.fail_closed
+
+
+def test_quarantining_finding_opened_drops_the_blocker_without_closing_it(tmp_path):
+    storage, _, cycle = final_blocked_cycle(tmp_path)
+    opened = next(
+        event
+        for event in storage.event_log()
+        if event.event == "FINDING_OPENED" and event.finding_id == "F-001"
+    )
+    assert storage.add_quarantine(
+        BlockerEventQuarantine(
+            project_id=cycle.project_id,
+            event_sha256=blocker_event_sha256(opened),
+            reason="F-001 was opened from a corrupted audit result.",
+            approved_by="principal-investigator",
+        )
+    )
+
+    state = reduce_blockers(
+        storage.event_log(),
+        cycle.project_id,
+        quarantined=storage.quarantined_event_hashes(cycle.project_id),
+    )
+
+    assert not state.fail_closed
+    assert "F-001" not in state.findings
+    assert "F-001" not in state.active
+    assert "F-002" in state.active
+    assert all(event.event != "FINDING_VERIFIED_CLOSED" for event in storage.event_log())
+    assert opened in storage.event_log()
+    assert storage.get_cycle(cycle.cycle_id).model_dump() == cycle.model_dump()
+    assert [record.reason for record in storage.quarantines(cycle.project_id)] == [
+        "F-001 was opened from a corrupted audit result."
+    ]

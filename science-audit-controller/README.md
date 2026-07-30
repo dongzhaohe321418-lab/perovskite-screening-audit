@@ -14,6 +14,7 @@ Version 1.0 runs one configured project per controller instance. This keeps repo
 - Claude submissions require authentication, exact report-hash confirmation, one unique disposition per finding, and an existing new fix commit.
 - A submitted fix does not close a finding. Only a later audit cycle at that exact commit can emit a verified closure.
 - High-risk actions default to `DENY`. `ALLOW` requires an exact permissive FINAL audit, matching manifest, no applicable blocker, and unexpired policy, budget, and PI approvals.
+- Only the PI can quarantine a blocker event. Quarantine is append-only, never removes an event from the event log, and removes an event from the blocker fold without declaring any finding resolved.
 
 ## Repository Contract
 
@@ -89,10 +90,12 @@ The GitHub API implementation compares complete recursive trees and fails if Git
 All non-webhook control endpoints use distinct bearer tokens:
 
 ```text
-POST /actions/check          ACTION_API_TOKEN
-POST /claude/dispositions   CLAUDE_API_TOKEN
-POST /authorizations        PI_APPROVAL_TOKEN
-GET  /cycles                CONTROLLER_READ_TOKEN
+POST /actions/check           ACTION_API_TOKEN
+POST /claude/dispositions     CLAUDE_API_TOKEN
+POST /authorizations          PI_APPROVAL_TOKEN
+POST /admin/quarantine-event  PI_APPROVAL_TOKEN
+GET  /cycles                  CONTROLLER_READ_TOKEN
+GET  /events                  CONTROLLER_READ_TOKEN
 ```
 
 Example high-risk authorization:

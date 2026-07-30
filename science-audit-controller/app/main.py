@@ -12,7 +12,7 @@ from app.claude_adapter import ClaudeAdapter
 from app.codex_adapter import CodexAdapter
 from app.cycle_manager import CycleManager
 from app.github_client import GitHubClient
-from app.models import ActionAuthorization, ActionCheckRequest
+from app.models import ActionAuthorization, ActionCheckRequest, BlockerEventQuarantine
 from app.policy_engine import HIGH_RISK_ACTIONS, PolicyEngine
 from app.report_validator import ClaudeDispositionValidator, ReportValidator
 from app.storage import JsonStorage
@@ -104,6 +104,23 @@ def create_app(
             "authorization_id": action_authorization.authorization_id,
         }
 
+    @app.post("/admin/quarantine-event")
+    def quarantine_blocker_event(
+        quarantine: BlockerEventQuarantine,
+        authorization: str | None = Header(default=None),
+    ):
+        _require_bearer_token("PI_APPROVAL_TOKEN", authorization)
+        storage.add_quarantine(quarantine)
+        return {
+            "status": "quarantine_recorded",
+            "event_sha256": quarantine.event_sha256,
+            "matched_event_indices": [
+                record.index
+                for record in storage.event_records(quarantine.project_id)
+                if record.event_sha256 == quarantine.event_sha256
+            ],
+        }
+
     @app.get("/cycles")
     def list_cycles(
         project_id: str | None = None,
@@ -111,6 +128,17 @@ def create_app(
     ):
         _require_bearer_token("CONTROLLER_READ_TOKEN", authorization)
         return storage.list_cycles(project_id)
+
+    @app.get("/events")
+    def list_blocker_events(
+        project_id: str | None = None,
+        authorization: str | None = Header(default=None),
+    ):
+        _require_bearer_token("CONTROLLER_READ_TOKEN", authorization)
+        return {
+            "events": storage.event_records(project_id),
+            "quarantined_events": storage.quarantines(project_id),
+        }
 
     return app
 

@@ -12,9 +12,12 @@ from typing import Any, Iterator
 from app.models import (
     ActionAuthorization,
     BlockerEvent,
+    BlockerEventQuarantine,
+    BlockerEventRecord,
     Cycle,
     CycleStatus,
     DispositionStatus,
+    blocker_event_sha256,
     utc_now,
 )
 
@@ -63,6 +66,7 @@ class JsonStorage:
             "event_log": [],
             "dispositions": {},
             "authorizations": [],
+            "quarantined_events": [],
             "audit_heads": {},
         }
 
@@ -335,6 +339,30 @@ class JsonStorage:
         with self._locked_state() as state:
             return [BlockerEvent(**item) for item in state["event_log"]]
 
+    def event_records(self, project_id: str | None = None) -> list[BlockerEventRecord]:
+        """Every appended event with its canonical hash and append-order index.
+
+        A project filter keeps events that carry no project_id, because those
+        are exactly the events that fail the project's fold and whose hashes an
+        operator therefore needs to read.
+        """
+
+        records = [
+            BlockerEventRecord(
+                index=index,
+                event_sha256=blocker_event_sha256(event),
+                event=event,
+            )
+            for index, event in enumerate(self.event_log())
+        ]
+        if project_id:
+            records = [
+                record
+                for record in records
+                if record.event.project_id in {None, project_id}
+            ]
+        return records
+
     def record_disposition(
         self,
         cycle_id: str,
@@ -380,3 +408,31 @@ class JsonStorage:
         if project_id:
             items = [item for item in items if item.project_id == project_id]
         return items
+
+    def add_quarantine(self, quarantine: BlockerEventQuarantine) -> bool:
+        """Append a quarantine record, returning whether it was new.
+
+        Quarantine is append-only and never removes an event from event_log.
+        Re-quarantining the same hash for the same project is a no-op.
+        """
+
+        with self._locked_state() as state:
+            if any(
+                item["project_id"] == quarantine.project_id
+                and item["event_sha256"] == quarantine.event_sha256
+                for item in state["quarantined_events"]
+            ):
+                return False
+            state["quarantined_events"].append(quarantine.model_dump(mode="json"))
+            self._write_unlocked(state)
+            return True
+
+    def quarantines(self, project_id: str | None = None) -> list[BlockerEventQuarantine]:
+        with self._locked_state() as state:
+            items = [BlockerEventQuarantine(**item) for item in state["quarantined_events"]]
+        if project_id:
+            items = [item for item in items if item.project_id == project_id]
+        return items
+
+    def quarantined_event_hashes(self, project_id: str | None = None) -> frozenset[str]:
+        return frozenset(item.event_sha256 for item in self.quarantines(project_id))

@@ -187,6 +187,83 @@ status_conflicts:
       - '(One|Two|Three|Four) of five entry conditions remain open'
 
 # ----------------------------------------------------------------------------------------
+# C-NUM-001 -- a published number vs the artifact its own document cites
+# ----------------------------------------------------------------------------------------
+# THESE ARE AGREEMENT ASSERTIONS BETWEEN TWO COMMITTED FILES, NEVER JUDGEMENTS ABOUT
+# SCIENTIFIC CORRECTNESS. An entry says only "this document and this artifact must state the
+# same number at the audited commit". It says nothing about whether that number is right,
+# well-chosen, converged, or believable -- that is the LLM auditor's territory, not Tier-0's.
+# A FAIL means the repository contradicts itself and one of the two files must change.
+#
+# Entry shape (id, doc, pattern, source, pointer required; the rest optional):
+#   - id:         short stable label, unique across this list; appears in the violation
+#     doc:        repo-relative path of the prose/markdown file, read at the audited commit
+#     pattern:    Python regex applied line by line to `doc`, with EXACTLY ONE capture group
+#                 whose text is the number. Anchor it verbatim (table cell, sentence) so it
+#                 captures the intended number and nothing else -- this check is HARD.
+#     source:     repo-relative path of the JSON artifact, read at the audited commit
+#     pointer:    dot path into that JSON; an integer segment indexes a list (rows.0.energy_eV)
+#     tolerance:  absolute tolerance on |doc - source|; default 0 (exact)
+#     occurrence: "all" (default) -- every match must agree, which is what makes a number
+#                 restated in several places stay consistent -- or "first"
+#
+# A pattern that matches ZERO times is a violation, not a pass: an assertion that has
+# silently stopped checking anything is itself the defect this check exists to prevent. So
+# is a `pointer` that no longer resolves, or a `doc`/`source` that has disappeared.
+numeric_assertions:
+  # results/objective2/paired_pilot/CORPUS108_RESULT.md §4 reports the paired statistics that
+  # corpus108/corpus108_stats.json holds; the markdown itself is the published claim.
+  - id: "corpus108-GA-mean"
+    doc: "results/objective2/paired_pilot/CORPUS108_RESULT.md"
+    pattern: '\| mean ΔE_a \| \*\*([+-]?[0-9]+\.[0-9]+) meV\*\*'
+    source: "results/objective2/paired_pilot/corpus108/corpus108_stats.json"
+    pointer: "GA.mean_meV"
+    tolerance: 0.05
+    occurrence: "all"
+
+  - id: "corpus108-Sr-mean"
+    doc: "results/objective2/paired_pilot/CORPUS108_RESULT.md"
+    # Second cell of the same row: skip the GA cell, which contains no pipe of its own.
+    pattern: '\| mean ΔE_a \|[^|]+\| \*\*([+-]?[0-9]+\.[0-9]+) meV\*\*'
+    source: "results/objective2/paired_pilot/corpus108/corpus108_stats.json"
+    pointer: "Sr.mean_meV"
+    tolerance: 0.05
+    occurrence: "all"
+
+  # A sample size, so tolerance 0 (exact). The repository's own rule is to count sample sizes
+  # from the machine-readable record rather than from prose; that only holds while the two
+  # agree, which is exactly what this entry pins.
+  - id: "corpus108-GA-paired-n"
+    doc: "results/objective2/paired_pilot/CORPUS108_RESULT.md"
+    pattern: '\| paired n \| \*\*([0-9]+)\*\*'
+    source: "results/objective2/paired_pilot/corpus108/corpus108_stats.json"
+    pointer: "GA.n"
+    tolerance: 0
+    occurrence: "all"
+
+  # The pooling gate offset is stated twice in HOST_MANIFEST.md (the gate table and the
+  # version-comparison table). occurrence "all" makes BOTH statements track the JSON, so
+  # correcting one and forgetting the other is caught. The v1/partial rows in that same
+  # comparison table are deliberately not bolded and so are outside this pattern.
+  - id: "host-pool-gate-offset"
+    doc: "results/fa_host/pool_v3_harmonised/HOST_MANIFEST.md"
+    pattern: '\*\*(-?[0-9]+\.[0-9]+) meV\*\*'
+    source: "results/fa_host/pool_v3_harmonised/HOST_MANIFEST.json"
+    pointer: "gate.offset_meV"
+    tolerance: 0.05
+    occurrence: "all"
+
+  # Ledger row m00, pinned through a list index: the energy in the markdown table must be
+  # the energy in the JSON row it transcribes.
+  - id: "host-m00-energy"
+    doc: "results/fa_host/pool_v3_harmonised/HOST_MANIFEST.md"
+    pattern: '\| m00 \|[^|]*\|[^|]*\| (-?[0-9]+\.[0-9]+) \|'
+    source: "results/fa_host/pool_v3_harmonised/HOST_MANIFEST.json"
+    pointer: "rows.0.energy_eV"
+    tolerance: 0.0005
+    occurrence: "all"
+
+# ----------------------------------------------------------------------------------------
 # C-SCOPE-001 -- changed paths outside the declared audit scope
 # ----------------------------------------------------------------------------------------
 # The scope is read from the audited commit, not from the working tree. It is machine

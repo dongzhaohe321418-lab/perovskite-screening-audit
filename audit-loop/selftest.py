@@ -118,8 +118,13 @@ def main() -> int:
     assert cycle["status"] == "FINAL", f"cycle not FINAL: {cycle['status']}"
     assert cycle["science_commit"] == science_head
     pending = json.loads((state / "pending_reviews" / f"{cycle_id}.json").read_text())
-    assert pending["decision"] == "PASS_WITH_CAVEATS"
-    assert pending["finding_ids"] == ["F-001"]
+    # The stub grades to the Tier-0 floors, so a tree with hard failures must
+    # come back BLOCK with one finding per failing check.
+    tier0 = json.loads((state / "cycles" / cycle_id / "check_report.json").read_text())
+    hard = sorted(r["check_id"] for r in tier0["results"]
+                  if r["class"] == "HARD" and r["status"] in {"FAIL", "ERROR"})
+    assert pending["decision"] == ("BLOCK" if hard else "PASS_WITH_CAVEATS"), pending["decision"]
+    assert len(pending["finding_ids"]) == max(1, len(hard)), pending["finding_ids"]
     audit_log = sh(["git", "log", "--oneline", "-2"], cwd=audit).stdout
     assert cycle_id in audit_log, "audit repo missing cycle commit"
     print(f"PASS: {cycle_id} FINAL, artifacts committed to audit repo, pending review emitted")
@@ -143,7 +148,10 @@ def main() -> int:
         "audit_report_id": cycle["audit_report_id"],
         "report_sha256_confirmed": True,
         "report_sha256": cycle["audit_report_sha256"],
-        "findings": [{"finding_id": "F-001", "disposition": "PASS_NO_ACTION"}],
+        # One disposition per finding: the controller rejects partial answers,
+        # which is the point of the per-finding rule.
+        "findings": [{"finding_id": fid, "disposition": "PASS_NO_ACTION"}
+                     for fid in pending["finding_ids"]],
     }
     response = client.post("/claude/dispositions", json=disposition,
                            headers={"Authorization": "Bearer selftest-claude_api_token"})

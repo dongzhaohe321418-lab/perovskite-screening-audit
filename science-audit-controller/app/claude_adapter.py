@@ -21,6 +21,11 @@ class ClaudeAdapter:
 
     def create_review_task(self, cycle: Cycle, audit_report_text: str, audit_result: dict[str, Any]) -> str:
         findings = audit_result.get("findings", [])
+        blocker_state = reduce_blockers(
+            self.storage.event_log(),
+            cycle.project_id,
+            quarantined=self.storage.quarantined_event_hashes(cycle.project_id),
+        )
         context = {
             "cycle_id": cycle.cycle_id,
             "audit_report_id": cycle.audit_report_id,
@@ -32,7 +37,7 @@ class ClaudeAdapter:
             "all_finding_ids": [finding.get("finding_id") for finding in findings],
             "current_active_blockers": [
                 event.model_dump(mode="json")
-                for event in reduce_blockers(self.storage.event_log(), cycle.project_id).active.values()
+                for event in blocker_state.active.values()
             ],
             "previous_dispositions": self.storage.get_disposition(cycle.cycle_id),
             "allowed_actions": [

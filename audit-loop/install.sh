@@ -112,12 +112,15 @@ fi
 echo "-- venv ready: $("$ROOT/.venv/bin/python" --version)"
 
 # 2. secrets (generated once, 600)
+# PI_APPROVAL_TOKEN lives in its own file that no automated process loads, so a
+# compromised orchestrator or auditor cannot authorize its own high-risk action.
 SECRETS="$ROOT/state/secrets.env"
+PI_SECRET="$ROOT/state/pi_token.env"
 if [ ! -f "$SECRETS" ]; then
   "$ROOT/.venv/bin/python" - "$SECRETS" <<'EOF'
 import secrets, sys
 keys = ["GITHUB_WEBHOOK_SECRET", "ACTION_API_TOKEN", "CLAUDE_API_TOKEN",
-        "PI_APPROVAL_TOKEN", "CONTROLLER_READ_TOKEN"]
+        "CONTROLLER_READ_TOKEN"]
 with open(sys.argv[1], "w") as fh:
     for key in keys:
         fh.write(f"{key}={secrets.token_hex(32)}\n")
@@ -126,6 +129,17 @@ EOF
   echo "-- generated $SECRETS"
 else
   echo "-- secrets already present"
+fi
+if [ ! -f "$PI_SECRET" ]; then
+  "$ROOT/.venv/bin/python" - "$PI_SECRET" <<'EOF'
+import secrets, sys
+with open(sys.argv[1], "w") as fh:
+    fh.write("# PI-only. No automated process loads this file. Source it by hand\n")
+    fh.write("# when you (the PI) call POST /authorizations.\n")
+    fh.write(f"PI_APPROVAL_TOKEN={secrets.token_hex(32)}\n")
+EOF
+  chmod 600 "$PI_SECRET"
+  echo "-- generated $PI_SECRET (PI-only, not loaded by automation)"
 fi
 
 # 3. generated config from templates

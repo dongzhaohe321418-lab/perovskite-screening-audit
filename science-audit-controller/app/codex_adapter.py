@@ -28,7 +28,11 @@ class CodexAdapter:
         self.prompt_dir = Path(prompt_dir)
 
     def create_audit_task(self, cycle: Cycle, previous_findings: list[dict[str, Any]] | None = None) -> str:
-        blocker_state = reduce_blockers(self.storage.event_log(), cycle.project_id)
+        blocker_state = reduce_blockers(
+            self.storage.event_log(),
+            cycle.project_id,
+            quarantined=self.storage.quarantined_event_hashes(cycle.project_id),
+        )
         context = {
             "cycle_id": cycle.cycle_id,
             "project_id": cycle.project_id,
