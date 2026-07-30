@@ -40,16 +40,28 @@ Codex 不得与 Tier-0 结果矛盾,引用其失败必须带 `check_id`;Codex �
 ### 硬性失败 vs 软性意见
 
 宪法 §12:只有 `CRITICAL/HIGH` 是阻断级;`MEDIUM/LOW/INFO` 记录、不阻断。
-`decision=BLOCK` 时 finding 必须带 `blocked_scopes`(对应 controller 高风险动作名),
-高风险动作走 `/actions/check` 默认 DENY。
+`decision=BLOCK` 时 finding 必须带 `blocked_scopes`(对应 controller 高风险动作名)。
+
+### 准入闸门的真实强度(不要说成 enforcement)
+
+高风险动作走 `/actions/check`,默认 DENY:需要该 commit 上恰好一份放行的 FINAL 审计、
+manifest 相符、无适用 blocker、且 PI 授权未过期。Claude Science 经 MCP 的 `check_action`
+咨询它,每次咨询写入 append-only 的 `state/action_ledger.jsonl`。
+
+**它在调用点是建议性的,不是机械不可绕过的**:不调用它的 caller 不会被它拦住。
+一次外部审计指出,一个行为者够不着的闸门等于没有闸门——我们此前正是如此(端点存在、
+零调用者、MCP 连 token 都没有)。现在闸门**可达且每次咨询可审计**,这是真实的进步;
+但要做到机械强制,必须把咨询装进动作本身(例如 HPC 提交脚本先查 `/actions/check`),
+那一步尚未做。这两件事不可混为一谈。
 
 ### 循环终止(宪法 §3.4)
 
 - 幂等:同 (commit, trigger, evidence hash) 只建一个 cycle;重复投递直接吸收。
 - 限速:`limits.max_cycles_per_hour`(默认 4),超出的事件留在 spool,launchd 每 15 分钟重试。
-- 升级:同一 finding 跨 `escalate_after_unresolved_cycles`(默认 3)个 FINAL cycle 未验证关闭
-  → `ESCALATE_TO_PI`,通知你,记入 `state/escalations.json`;Claude Science 可经 MCP
-  `acknowledge_escalation` 记录你的裁决。
+- 升级即暂停:同一 finding 跨 `escalate_after_unresolved_cycles`(默认 3)个 FINAL cycle
+  未验证关闭 → `ESCALATE_TO_PI`,记入 `state/escalations.json`,并**停止对新提交的自动复审**,
+  直到经 MCP `acknowledge_escalation` 由你放行。这才是"在有限轮次内 PASS 或转人工"的实现;
+  只发通知然后继续转,证明不了终止性。
 - `PASS` 不自动触发提交,`BLOCK` 不自动触发昂贵修复——都只触发 disposition(§3.5)。
 
 ## 目录
@@ -107,7 +119,7 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ericdong.audit-loop.
 
 | 强度 | 内容 |
 |---|---|
-| **机械证明** | controller 64 个单元测试;Tier-0 11 项检查在真实仓库上确定性可复现;干净克隆在陌生路径 install + 全套测试通过 |
+| **机械证明** | controller 66 个单元测试 + 编排器 3 个单元测试;Tier-0 11 项检查在真实仓库上确定性可复现;干净克隆在陌生路径 install + 全套测试通过 |
 | **模拟端到端** | `selftest.py` 全链路 4/4,但 Codex 由 `--simulate-codex` 桩替代 |
 | **真实审计** | 5 轮真实 Codex 审计(1 轮生产 + 4 轮 mutation),每轮 ~316 万 input tokens |
 | **未验证** | **验证关闭路径(disposition → 修复 → 复审 → verified closure)从未用真实审计器跑通**。相关两处缺陷由推理+单元测试修复,不等于端到端成立。 |
@@ -117,8 +129,12 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ericdong.audit-loop.
 - **Tier-0 覆盖率 11/27**:规则手册声明 27 个 `C-*`,已实现 11 个;其余 16 条规则纯靠 LLM 判断。
 - **`severity_floors` 是事后拟合的**:下限依据真实审计观测到的评级设定,是策略选择而非独立验证。
 - **假阳性率数据极弱**:`C-INJECT-001` / `C-NUM-001` 各只在一棵树上验证过无假阳性,n=1 几乎不排除任何东西。
-- **执行来源部分自述**:回执现已绑定策略包(宪法/规则手册/检查器哈希)与模型标识,但没有 provider
-  request ID 或独立 attestation,成本台账靠 cwd 匹配会话文件。
+- **执行来源部分自述**:回执已绑定策略包(宪法/规则手册/检查器哈希)、模型标识与
+  `prompt_sha256`(编排器比对本轮实际下发的提示词),`provider` 字段可选记录;但仍无
+  provider request ID 或独立 attestation,成本台账靠 cwd 匹配会话文件。
+- **覆盖是自述的**:回执必须申报 `coverage`(绑定本轮 evidence manifest、正整数
+  `paths_examined`、method),编排器校验其绑定;但**没有任何东西独立核实审计者真的读过那些路径**。
+  这挡住了"什么都没看的空 PASS",挡不住夸大的覆盖声明。
 - **策略包绑定的执行位置**:在编排器提交工件前校验。当前架构下 Codex 从不 push,编排器即闸门,
   故此处足够;若将来允许 Codex 身份直接推送审计仓,该校验必须移入 controller。
 

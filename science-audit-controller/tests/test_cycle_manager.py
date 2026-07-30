@@ -488,3 +488,53 @@ def test_parent_report_hash_is_immutable_once_final(tmp_path):
                               decision="PASS", findings=[]).valid
     with pytest.raises(ImmutableCycleError):
         storage.update_cycle(cycle.cycle_id, parent_report_sha256="9" * 64)
+
+
+def test_audit_result_without_coverage_is_rejected(tmp_path):
+    """A verdict that does not say what it examined is not a verdict."""
+    storage, fake, cycle, validator = make_cycle(tmp_path)
+    prefix = f"projects/{cycle.project_id}/cycles/{cycle.cycle_id}/"
+    paths = audit_artifacts(fake, "3" * 40, cycle, "PASS", [])
+    uncovered = json.loads(fake.files[("audit", "3" * 40, prefix + "audit_result.json")])
+    uncovered.pop("coverage")
+    fake.files[("audit", "3" * 40, prefix + "audit_result.json")] = json.dumps(
+        uncovered, sort_keys=True
+    )
+    manifest = json.loads(fake.files[("audit", "3" * 40, prefix + "report_manifest.json")])
+    manifest["files"]["audit_result.json"]["sha256"] = hashlib.sha256(
+        fake.files[("audit", "3" * 40, prefix + "audit_result.json")].encode("utf-8")
+    ).hexdigest()
+    fake.files[("audit", "3" * 40, prefix + "report_manifest.json")] = json.dumps(
+        manifest, sort_keys=True
+    )
+    fake.set_diff("audit", "0" * 40, "3" * 40, paths)
+
+    result = validator.validate_audit_push(cycle.project_id, "0" * 40, "3" * 40)
+
+    assert not result.valid
+    assert any("coverage" in error for error in result.errors)
+
+
+def test_receipt_without_prompt_hash_is_rejected(tmp_path):
+    """The receipt must name the prompt that produced it."""
+    storage, fake, cycle, validator = make_cycle(tmp_path)
+    prefix = f"projects/{cycle.project_id}/cycles/{cycle.cycle_id}/"
+    paths = audit_artifacts(fake, "3" * 40, cycle, "PASS", [])
+    metadata = json.loads(fake.files[("audit", "3" * 40, prefix + "codex_run_metadata.json")])
+    metadata.pop("prompt_sha256")
+    fake.files[("audit", "3" * 40, prefix + "codex_run_metadata.json")] = json.dumps(
+        metadata, sort_keys=True
+    )
+    manifest = json.loads(fake.files[("audit", "3" * 40, prefix + "report_manifest.json")])
+    manifest["files"]["codex_run_metadata.json"]["sha256"] = hashlib.sha256(
+        fake.files[("audit", "3" * 40, prefix + "codex_run_metadata.json")].encode("utf-8")
+    ).hexdigest()
+    fake.files[("audit", "3" * 40, prefix + "report_manifest.json")] = json.dumps(
+        manifest, sort_keys=True
+    )
+    fake.set_diff("audit", "0" * 40, "3" * 40, paths)
+
+    result = validator.validate_audit_push(cycle.project_id, "0" * 40, "3" * 40)
+
+    assert not result.valid
+    assert any("prompt_sha256" in error for error in result.errors)

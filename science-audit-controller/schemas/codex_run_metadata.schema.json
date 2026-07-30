@@ -2,22 +2,47 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "required": [
-    "cycle_id",
     "audited_commit",
-    "runner",
-    "started_at",
     "completed_at",
-    "policy_bundle"
+    "cycle_id",
+    "model",
+    "policy_bundle",
+    "prompt_sha256",
+    "runner",
+    "started_at"
   ],
   "properties": {
-    "cycle_id": {"type": "string", "pattern": "^CYCLE-[0-9]{6}$"},
-    "audited_commit": {"type": "string", "pattern": "^[a-fA-F0-9]{40}$"},
-    "runner": {"type": "string", "minLength": 1},
-    "runner_version": {"type": "string"},
-    "model": {"type": "string", "minLength": 1},
-    "prompt_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
-    "started_at": {"type": "string", "format": "date-time"},
-    "completed_at": {"type": "string", "format": "date-time"},
+    "cycle_id": {
+      "type": "string",
+      "pattern": "^CYCLE-[0-9]{6}$"
+    },
+    "audited_commit": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{40}$"
+    },
+    "runner": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runner_version": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prompt_sha256": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
     "policy_bundle": {
       "type": "object",
       "description": "The exact policy this receipt was produced under. A PASS that cannot name its own constitution, rulebook and checker version proves nothing about what was enforced.",
@@ -28,13 +53,47 @@
         "checks_sha256"
       ],
       "properties": {
-        "constitution_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
-        "rulebook_version": {"type": "string", "minLength": 1},
-        "rulebook_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
-        "checks_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+        "constitution_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "rulebook_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rulebook_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "checks_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
         "calibration_sha256": {
           "type": "array",
-          "items": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}
+          "items": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "provider": {
+      "type": "object",
+      "description": "Execution provenance. Absent fields are honestly absent rather than asserted.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "response_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
         }
       },
       "additionalProperties": false

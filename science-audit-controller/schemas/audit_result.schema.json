@@ -1,36 +1,78 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["cycle_id", "audited_commit", "decision", "findings"],
+  "required": [
+    "cycle_id",
+    "audited_commit",
+    "decision",
+    "findings",
+    "coverage"
+  ],
   "properties": {
-    "cycle_id": {"type": "string", "pattern": "^CYCLE-[0-9]{6}$"},
-    "audited_commit": {"type": "string", "pattern": "^[a-fA-F0-9]{40}$"},
+    "cycle_id": {
+      "type": "string",
+      "pattern": "^CYCLE-[0-9]{6}$"
+    },
+    "audited_commit": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{40}$"
+    },
     "decision": {
       "type": "string",
-      "enum": ["PASS", "PASS_WITH_CAVEATS", "BLOCK", "NOT_VERIFIABLE"]
+      "enum": [
+        "PASS",
+        "PASS_WITH_CAVEATS",
+        "BLOCK",
+        "NOT_VERIFIABLE"
+      ]
     },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["finding_id", "title", "severity", "status"],
+        "required": [
+          "finding_id",
+          "title",
+          "severity",
+          "status"
+        ],
         "properties": {
-          "finding_id": {"type": "string", "pattern": "^F-[A-Za-z0-9._-]+$"},
-          "title": {"type": "string", "minLength": 1},
+          "finding_id": {
+            "type": "string",
+            "pattern": "^F-[A-Za-z0-9._-]+$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
           "severity": {
             "type": "string",
-            "enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "MEDIUM",
+              "LOW",
+              "INFO"
+            ]
           },
-          "status": {"const": "OPEN"},
+          "status": {
+            "const": "OPEN"
+          },
           "blocked_scopes": {
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
-            "items": {"type": "string", "minLength": 1}
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           },
           "evidence": {
             "type": "array",
-            "items": {"type": "string", "minLength": 1}
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
           }
         },
         "additionalProperties": false
@@ -40,15 +82,57 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["finding_id", "verification_summary"],
+        "required": [
+          "finding_id",
+          "verification_summary"
+        ],
         "properties": {
-          "finding_id": {"type": "string", "pattern": "^F-[A-Za-z0-9._-]+$"},
-          "verification_summary": {"type": "string", "minLength": 1}
+          "finding_id": {
+            "type": "string",
+            "pattern": "^F-[A-Za-z0-9._-]+$"
+          },
+          "verification_summary": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "additionalProperties": false
       }
     },
-    "summary": {"type": "string"}
+    "summary": {
+      "type": "string"
+    },
+    "coverage": {
+      "type": "object",
+      "description": "What this audit actually examined. A non-empty citation list is not evidence of coverage; a verdict over an unexamined tree is not a verdict.",
+      "required": [
+        "evidence_manifest_sha256",
+        "paths_examined",
+        "method"
+      ],
+      "properties": {
+        "evidence_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "paths_examined": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "not_examined": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

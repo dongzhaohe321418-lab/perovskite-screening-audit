@@ -3,7 +3,12 @@
 
 本地 stdio MCP server：让 "Claude Science" 在每次 session 结束时与本地科学审计
 流水线交互 —— 查看审计状态、领取 pending review、提交 disposition、请求新的
-审计 cycle、确认 escalation、通知 PI（人为介入通道）。
+审计 cycle、确认 escalation、通知 PI（人为介入通道）、以及在做高风险动作前
+咨询 controller 的准入闸门（check_action）。
+
+关于 check_action 的诚实说明：它让 controller 的 fail-closed policy engine 变得
+*可达*，并把每一次咨询写进 append-only 的 action_ledger.jsonl。它在调用点是
+**建议性**的（advisory）：不调用它的 caller 不会被它拦住。它不是 enforcement。
 
 设计约束:
   * stdout 只承载协议 JSON 行；所有日志走 stderr。
@@ -40,7 +45,7 @@ PROTOCOL_OUT = sys.stdout
 sys.stdout = sys.stderr
 
 SERVER_NAME = "science-audit-loop"
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "1.1.0"
 DEFAULT_PROTOCOL_VERSION = "2025-06-18"
 
 # Paths are derived from this file's location so a clone runs anywhere.
@@ -49,13 +54,22 @@ _LOOP_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = str(_LOOP_ROOT / "orchestrator" / "config.yaml")
 FALLBACK_PROJECTS_YAML = str(_LOOP_ROOT / "orchestrator" / "projects.yaml")
 
-# Least privilege: this server submits dispositions on Claude Science's behalf and
-# nothing else. It must not hold PI_APPROVAL_TOKEN — an executor able to authorize
-# its own high-risk action would collapse the two-key rule — nor the action or read
-# tokens it never uses. Endpoints whose token is absent answer 503, which is the
+# Least privilege: this server holds exactly the two tokens the executor legitimately
+# needs, and no more.
+#   CLAUDE_API_TOKEN  — the disposition channel (POST /claude/dispositions): saying what
+#                       the executor intends to do about findings already raised against it.
+#   ACTION_API_TOKEN  — the gate-consultation channel (POST /actions/check): asking the
+#                       fail-closed policy engine whether a high-risk action is permitted.
+#                       Asking is not deciding: /actions/check only reads policy state and
+#                       returns ALLOW/DENY; it cannot create or relax an authorization.
+# Still withheld, deliberately: PI_APPROVAL_TOKEN (POST /authorizations, POST
+# /admin/quarantine-event) — an executor able to mint its own approval or quarantine the
+# blocker events against it would collapse the two-key rule — and CONTROLLER_READ_TOKEN,
+# which this server never uses. Endpoints whose token is absent answer 503, which is the
 # intended posture rather than a misconfiguration.
 SECRET_KEYS = (
     "CLAUDE_API_TOKEN",
+    "ACTION_API_TOKEN",
 )
 
 DISPOSITION_VALUES = (
@@ -68,7 +82,77 @@ DISPOSITION_VALUES = (
 )
 
 SHA40_RE = re.compile(r"^[0-9a-fA-F]{40}$")
+SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
 CYCLE_ID_RE = re.compile(r"^CYCLE-[0-9]{6}$")
+
+# check_action always speaks as the executor; the policy engine's allow-list is
+# {"claude_science"} and this server has no business claiming to be anyone else.
+GATE_ACTOR = "claude_science"
+
+# Where the evidence-manifest hash is declared inside the science repo.
+AUDIT_REQUEST_REL_PATH = ".audit/audit_request.json"
+MANIFEST_HASH_FIELD = "evidence_manifest_sha256"
+
+# The single sentence that must accompany every gate answer. The audit finding this
+# tool exists to fix was "the gate is unreachable"; the fix is reachability plus a
+# record, NOT enforcement, and saying otherwise would re-introduce a false assurance.
+ADVISORY_NOTE = (
+    "WHAT THIS GATE IS, EXACTLY: check_action is ADVISORY AT THE POINT OF CALL. The "
+    "controller's fail-closed policy engine makes the decision and this consultation is now "
+    "on record in the append-only ledger — but nothing here mechanically prevents an action. "
+    "A caller that simply never calls check_action is not stopped by it. Reachable and "
+    "logged, not enforced: treat the answer as binding on yourself, because nothing else "
+    "will."
+)
+
+# Verbatim reason codes from science-audit-controller/app/policy_engine.py, each with a
+# one-line plain-English gloss. ACTIVE_BLOCKER_<finding_id> is handled by prefix below.
+REASON_CODE_GLOSSES: dict[str, str] = {
+    "UNKNOWN_PROJECT": (
+        "the project_id this server sent (from config.yaml project.project_id) is not one the "
+        "controller has configured — nothing can be authorized under an unknown project."
+    ),
+    "ACTOR_NOT_ALLOWED": (
+        "the actor is not on the policy engine's allow-list, so no action of any risk level "
+        "can be authorized for it."
+    ),
+    "BLOCKER_STATE_INCONSISTENT": (
+        "the blocker event log did not reduce cleanly (duplicate, orphaned or contradictory "
+        "events), so the engine fails closed and denies everything until a human repairs it."
+    ),
+    "UNKNOWN_ACTION": (
+        "the policy engine has no rule for this action name. It is fail-closed by default: "
+        "anything it does not recognise is DENIED rather than waved through. Check the "
+        "spelling against the known action names, and never invent one to get past this."
+    ),
+    "NO_FINAL_AUDIT_FOR_COMMIT": (
+        "no audit cycle for this exact science commit has reached FINAL. An unaudited commit "
+        "can never carry a high-risk action — request an audit and wait for it to finish."
+    ),
+    "MANIFEST_MISMATCH": (
+        "the evidence-manifest SHA-256 does not equal the one the FINAL audit for this commit "
+        "recorded — i.e. the audit did not cover the evidence set you are pointing at."
+    ),
+    "AUDIT_DECISION_NOT_PERMISSIVE": (
+        "the FINAL audit for this commit decided something other than PASS or "
+        "PASS_WITH_CAVEATS (e.g. BLOCK or NOT_VERIFIABLE); only those two are permissive."
+    ),
+    "POLICY_APPROVAL_REQUIRED": (
+        "no unexpired authorization matching this exact actor + action + commit + manifest "
+        "carries policy_approved=true."
+    ),
+    "BUDGET_APPROVAL_REQUIRED": (
+        "no unexpired authorization matching this exact actor + action + commit + manifest "
+        "carries budget_approved=true."
+    ),
+    "PI_APPROVAL_REQUIRED": (
+        "no unexpired authorization matching this exact actor + action + commit + manifest "
+        "carries pi_approved=true. Only the PI can create one (POST /authorizations with "
+        "PI_APPROVAL_TOKEN); this server deliberately does not hold that token, so you "
+        "cannot clear this yourself — use notify_pi to ask."
+    ),
+}
+ACTIVE_BLOCKER_PREFIX = "ACTIVE_BLOCKER_"
 
 # audit_report.md is embedded verbatim; guard against pathological sizes.
 MAX_EMBED_CHARS = 200_000
@@ -298,6 +382,11 @@ class Context:
     def notifications_log(self) -> Path:
         return self.state_dir / "logs" / "notifications.log"
 
+    @property
+    def action_ledger_path(self) -> Path:
+        """Append-only record of every check_action consultation."""
+        return self.state_dir / "action_ledger.jsonl"
+
     def make_audit_request_script(self) -> Path:
         """orchestrator/make_audit_request.py, preferring the derived root."""
         derived = self.audit_loop_root / "orchestrator" / "make_audit_request.py"
@@ -338,16 +427,27 @@ class Context:
         return True, [key for key in SECRET_KEYS if not secrets.get(key)]
 
     # -- controller -------------------------------------------------------
-    def controller_client(self) -> Any:
-        """Build the controller ASGI app in-process on first use (lazy)."""
+    def controller_client(self, required_token: str = "CLAUDE_API_TOKEN") -> Any:
+        """Build the controller ASGI app in-process on first use (lazy).
+
+        required_token names the secret the *calling tool* needs; a caller whose token
+        is absent gets a configuration error even when the client is already cached,
+        because the endpoint it wants would answer 401/503 anyway.
+        """
         if self._controller_client is not None:
+            _, cached_secrets = self._controller_client
+            if not cached_secrets.get(required_token):
+                raise ToolError(
+                    f"secrets.env has no {required_token} — run install.sh first "
+                    f"({self.secrets_env})"
+                )
             return self._controller_client
         self.require_config()
         secrets = self.load_secrets()
         missing = [key for key in SECRET_KEYS if not secrets.get(key)]
-        if "CLAUDE_API_TOKEN" in missing:
+        if required_token in missing:
             raise ToolError(
-                f"secrets.env has no CLAUDE_API_TOKEN — run install.sh first ({self.secrets_env})"
+                f"secrets.env has no {required_token} — run install.sh first ({self.secrets_env})"
             )
         controller_root = self.controller_root
         if not (controller_root / "app" / "main.py").exists():
@@ -452,6 +552,26 @@ def load_escalations(ctx: Context) -> dict[str, Any]:
     return payload
 
 
+def load_action_ledger(ctx: Context, tail: int = 200) -> list[dict[str, Any]]:
+    """Recent check_action consultations, oldest first. Never rewrites the ledger."""
+    raw = read_text_or_none(ctx.action_ledger_path)
+    if raw is None:
+        return []
+    entries: list[dict[str, Any]] = []
+    for line in raw.splitlines()[-tail:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            payload = json.loads(stripped)
+        except (json.JSONDecodeError, ValueError):
+            log(f"skipping malformed line in {ctx.action_ledger_path.name}")
+            continue
+        if isinstance(payload, dict):
+            entries.append(payload)
+    return entries
+
+
 # --------------------------------------------------------------------------
 # tool: audit_status
 # --------------------------------------------------------------------------
@@ -526,6 +646,31 @@ def tool_audit_status(ctx: Context, _args: dict[str, Any]) -> str:
         lines.append(
             f"  OPEN {item.get('escalation_id', '?')}  finding={item.get('finding_id', '?')}"
             f"  cycles={cycle_text}  opened_at={item.get('opened_at', '?')}"
+        )
+    lines.append("")
+
+    ledger = load_action_ledger(ctx)
+    if ledger:
+        recent_consults = ledger[-5:]
+        lines.append(
+            f"Gate consultations (check_action): {len(ledger)} recorded, "
+            f"showing last {len(recent_consults)}"
+        )
+        for entry in recent_consults:
+            when = str(entry.get("timestamp") or "?")
+            decision = str(entry.get("decision") or "?")
+            consulted_action = str(entry.get("action") or "?")
+            codes = entry.get("reason_codes")
+            code_text = ", ".join(str(code) for code in codes) if isinstance(codes, list) else ""
+            if len(code_text) > 64:
+                code_text = code_text[:61] + "..."
+            lines.append(
+                f"  {when:<32} {decision:<6} {consulted_action:<26} {code_text}"
+            )
+        lines.append(f"  ledger: {ctx.action_ledger_path}")
+    else:
+        lines.append(
+            f"Gate consultations (check_action): none recorded ({ctx.action_ledger_path})"
         )
     lines.append("")
 
@@ -996,6 +1141,355 @@ def tool_notify_pi(ctx: Context, args: dict[str, Any]) -> str:
 
 
 # --------------------------------------------------------------------------
+# tool: check_action  (admission gate consultation)
+# --------------------------------------------------------------------------
+def gloss_reason_code(code: str) -> str:
+    if code.startswith(ACTIVE_BLOCKER_PREFIX):
+        finding_id = code[len(ACTIVE_BLOCKER_PREFIX) :] or "(unnamed)"
+        return (
+            f"finding {finding_id} is an OPEN blocking finding whose blocked_scopes cover this "
+            "action; it stays active until a fix is submitted, re-audited, and recorded as "
+            "FINDING_VERIFIED_CLOSED by the controller. You cannot clear it by asserting it is fixed."
+        )
+    return REASON_CODE_GLOSSES.get(
+        code,
+        "no gloss for this code in this server — it came from the controller verbatim; read "
+        "science-audit-controller/app/policy_engine.py and treat it as a denial reason.",
+    )
+
+
+def resolve_default_science_commit(ctx: Context) -> str:
+    repo = ctx.science_repo
+    if not (repo / ".git").exists():
+        raise ToolError(
+            f"cannot resolve the default science_commit: {repo} is not a git repository. "
+            "Pass science_commit explicitly (full 40-hex); nothing was guessed."
+        )
+    result = run_git(repo, "rev-parse", "HEAD")
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip()[:300] or f"exit {result.returncode}"
+        raise ToolError(
+            f"cannot resolve the default science_commit: `git -C {repo} rev-parse HEAD` failed "
+            f"— {detail}. Pass science_commit explicitly; nothing was guessed."
+        )
+    sha = result.stdout.strip()
+    if not SHA40_RE.match(sha):
+        raise ToolError(
+            f"cannot resolve the default science_commit: git returned {sha!r}, not a 40-hex sha."
+        )
+    return sha.lower()
+
+
+def resolve_default_manifest_sha256(ctx: Context, commit: str) -> str:
+    """Read evidence_manifest_sha256 from .audit/audit_request.json at `commit`.
+
+    Every failure path names exactly what was missing. A hash is never invented: an
+    approximate manifest hash would silently defeat the MANIFEST_MISMATCH check.
+    """
+    repo = ctx.science_repo
+    spec = f"{commit}:{AUDIT_REQUEST_REL_PATH}"
+    if not (repo / ".git").exists():
+        raise ToolError(
+            f"cannot resolve the default manifest_sha256: {repo} is not a git repository. "
+            "Pass manifest_sha256 explicitly (64-hex); no hash was guessed."
+        )
+    result = run_git(repo, "show", spec)
+    if result.returncode != 0:
+        detail = (result.stderr or "").strip()[:300] or f"exit {result.returncode}"
+        raise ToolError(
+            f"cannot resolve the default manifest_sha256: `git -C {repo} show {spec}` failed — "
+            f"{detail}. Either commit {commit} has no {AUDIT_REQUEST_REL_PATH}, or that sha is "
+            "unknown to this repo. Pass manifest_sha256 explicitly; no hash was guessed."
+        )
+    try:
+        payload = json.loads(result.stdout)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ToolError(
+            f"cannot resolve the default manifest_sha256: {AUDIT_REQUEST_REL_PATH} at {commit} "
+            f"is not valid JSON ({exc}). Pass manifest_sha256 explicitly; no hash was guessed."
+        ) from exc
+    if not isinstance(payload, dict):
+        raise ToolError(
+            f"cannot resolve the default manifest_sha256: {AUDIT_REQUEST_REL_PATH} at {commit} "
+            "is not a JSON object. Pass manifest_sha256 explicitly; no hash was guessed."
+        )
+    value = payload.get(MANIFEST_HASH_FIELD)
+    if value is None:
+        keys = ", ".join(sorted(str(key) for key in payload)) or "(no keys)"
+        raise ToolError(
+            f"cannot resolve the default manifest_sha256: {AUDIT_REQUEST_REL_PATH} at {commit} "
+            f"has no {MANIFEST_HASH_FIELD} field (keys present: {keys}). Pass manifest_sha256 "
+            "explicitly; no hash was guessed."
+        )
+    if not isinstance(value, str) or not SHA256_RE.match(value):
+        raise ToolError(
+            f"cannot resolve the default manifest_sha256: {MANIFEST_HASH_FIELD} in "
+            f"{AUDIT_REQUEST_REL_PATH} at {commit} is {value!r}, not a 64-hex SHA-256. "
+            "Pass manifest_sha256 explicitly; no hash was guessed."
+        )
+    return value.lower()
+
+
+def final_cycle_for_commit(ctx: Context, commit: str) -> dict[str, Any] | None:
+    """Read-only mirror of the controller's own lookup, used only to name a cycle."""
+    matches = [
+        cycle
+        for cycle in load_controller_cycles(ctx)
+        if str(cycle.get("science_commit", "")).lower() == commit
+        and str(cycle.get("status")) == "FINAL"
+    ]
+    return matches[-1] if matches else None
+
+
+def append_action_ledger(
+    ctx: Context,
+    *,
+    action: str,
+    science_commit: str,
+    manifest_sha256: str,
+    intent: str | None,
+    decision: str,
+    reason_codes: list[str],
+    error: str | None = None,
+) -> dict[str, Any]:
+    """One O_APPEND write per consultation. An append-only ledger is never rewritten."""
+    record: dict[str, Any] = {
+        "timestamp": utc_now_iso(),
+        "action": action,
+        "science_commit": science_commit,
+        "manifest_sha256": manifest_sha256,
+        "intent": intent,
+        "decision": decision,
+        "reason_codes": reason_codes,
+        "source": "mcp",
+    }
+    if error is not None:
+        record["error"] = error
+    append_log_line(ctx.action_ledger_path, json.dumps(record, ensure_ascii=False, sort_keys=True))
+    return record
+
+
+def tool_check_action(ctx: Context, args: dict[str, Any]) -> str:
+    ctx.require_config()
+
+    action = args.get("action")
+    if not isinstance(action, str) or not action.strip():
+        raise ToolError("argument 'action' is required and must be a non-empty string")
+    action = action.strip()
+
+    intent = args.get("intent")
+    if intent is not None and not isinstance(intent, str):
+        raise ToolError("argument 'intent' must be a string if given")
+    intent = intent.strip() if isinstance(intent, str) and intent.strip() else None
+
+    supplied_commit = args.get("science_commit")
+    if supplied_commit is not None and not isinstance(supplied_commit, str):
+        raise ToolError("argument 'science_commit' must be a full 40-hex string if given")
+    if supplied_commit:
+        if not SHA40_RE.match(supplied_commit.strip()):
+            raise ToolError(
+                f"science_commit must be a full 40-character hex sha, got {supplied_commit!r}. "
+                "Omit it to use the science repo HEAD; abbreviated shas are not accepted."
+            )
+        science_commit = supplied_commit.strip().lower()
+        commit_origin = "supplied by caller"
+    else:
+        science_commit = resolve_default_science_commit(ctx)
+        commit_origin = f"default: HEAD of {ctx.science_repo}"
+
+    supplied_manifest = args.get("manifest_sha256")
+    if supplied_manifest is not None and not isinstance(supplied_manifest, str):
+        raise ToolError("argument 'manifest_sha256' must be a 64-hex string if given")
+    if supplied_manifest:
+        if not SHA256_RE.match(supplied_manifest.strip()):
+            raise ToolError(
+                f"manifest_sha256 must be a 64-character hex SHA-256, got {supplied_manifest!r}."
+            )
+        manifest_sha256 = supplied_manifest.strip().lower()
+        manifest_origin = "supplied by caller"
+    else:
+        manifest_sha256 = resolve_default_manifest_sha256(ctx, science_commit)
+        manifest_origin = f"default: {MANIFEST_HASH_FIELD} in {AUDIT_REQUEST_REL_PATH} @ commit"
+
+    project_id = ctx.project_id
+    if not project_id:
+        raise ToolError(
+            f"config has no project.project_id ({ctx.config_path}); the policy engine cannot be "
+            "consulted without it."
+        )
+
+    client, secrets = ctx.controller_client("ACTION_API_TOKEN")
+    token = secrets.get("ACTION_API_TOKEN", "")
+    body = {
+        "project_id": project_id,
+        "actor": GATE_ACTOR,
+        "action": action,
+        "science_commit": science_commit,
+        "manifest_sha256": manifest_sha256,
+    }
+    try:
+        response = client.post(
+            "/actions/check", json=body, headers={"Authorization": f"Bearer {token}"}
+        )
+    except Exception as exc:
+        raise ToolError(
+            f"controller POST /actions/check failed: {type(exc).__name__}: {exc}. "
+            "No decision was obtained — treat that as 'not permitted', not as permission."
+        ) from exc
+
+    try:
+        payload = response.json()
+    except Exception:
+        payload = None
+
+    decision = ""
+    reason_codes: list[str] = []
+    if response.status_code == 200 and isinstance(payload, dict):
+        decision = str(payload.get("decision") or "")
+        raw_codes = payload.get("reason_codes")
+        reason_codes = [str(code) for code in raw_codes] if isinstance(raw_codes, list) else []
+
+    if decision not in {"ALLOW", "DENY"}:
+        detail = (response.text or "")[:2000]
+        if response.status_code == 401:
+            hint = (
+                "HTTP 401: the ACTION_API_TOKEN in secrets.env is not the one the controller "
+                "expects."
+            )
+        elif response.status_code == 503:
+            hint = "HTTP 503: the controller process has no ACTION_API_TOKEN configured."
+        elif response.status_code == 422:
+            hint = "HTTP 422: the controller rejected the request body as invalid."
+        else:
+            hint = f"HTTP {response.status_code} with no usable decision."
+        with contextlib.suppress(OSError):
+            append_action_ledger(
+                ctx,
+                action=action,
+                science_commit=science_commit,
+                manifest_sha256=manifest_sha256,
+                intent=intent,
+                decision="ERROR",
+                reason_codes=[],
+                error=f"{hint} {detail}"[:1000],
+            )
+        raise ToolError(
+            f"the policy gate did not answer. {hint}\n{detail}\n"
+            "No decision was obtained, so this action is NOT permitted — the absence of a DENY "
+            "is not an ALLOW. The failed consultation was recorded in "
+            f"{ctx.action_ledger_path}."
+        )
+
+    try:
+        record = append_action_ledger(
+            ctx,
+            action=action,
+            science_commit=science_commit,
+            manifest_sha256=manifest_sha256,
+            intent=intent,
+            decision=decision,
+            reason_codes=reason_codes,
+            error=None,
+        )
+    except OSError as exc:
+        raise ToolError(
+            f"the gate answered {decision}"
+            + (f" with reason codes {', '.join(reason_codes)}" if reason_codes else "")
+            + f", but the consultation could NOT be recorded in {ctx.action_ledger_path}: {exc}. "
+            "An unrecorded consultation is not an auditable one; fix the ledger path and ask "
+            "again before acting on that answer."
+        ) from exc
+
+    header = [
+        f"action:          {action}",
+        f"actor:           {GATE_ACTOR}",
+        f"project_id:      {project_id}",
+        f"science_commit:  {science_commit}   [{commit_origin}]",
+        f"manifest_sha256: {manifest_sha256}   [{manifest_origin}]",
+        f"intent:          {intent if intent else '(none given)'}",
+        f"asked at:        {record['timestamp']}",
+    ]
+
+    if decision == "DENY":
+        lines = [
+            "STOP — the policy gate returned DENY. Do NOT perform this action.",
+            "",
+            *header,
+            "",
+            "Reason codes verbatim from the controller, each with a one-line gloss:",
+        ]
+        if reason_codes:
+            for code in reason_codes:
+                lines.append(f"  - {code}")
+                lines.append(f"      {gloss_reason_code(code)}")
+        else:
+            lines.append("  - (the controller returned DENY with an empty reason_codes list)")
+            lines.append("      no reason was given; a DENY without a reason is still a DENY.")
+        lines.extend(
+            [
+                "",
+                "What to do now:",
+                "  * Do not retry with different arguments to hunt for an ALLOW, and do not do the "
+                "action by another route. Both defeat the point of asking.",
+                "  * Fix the underlying cause the codes name (finish the audit, correct the "
+                "manifest, land and re-audit the fix), then ask again.",
+                "  * If the block needs a human decision, use notify_pi. PI approval is created by "
+                "the PI against the controller; this server holds no PI_APPROVAL_TOKEN, by design.",
+                "",
+                f"ledger: 1 line appended to {ctx.action_ledger_path}",
+                "",
+                ADVISORY_NOTE,
+            ]
+        )
+        return "\n".join(lines)
+
+    cycle = final_cycle_for_commit(ctx, science_commit)
+    lines = [
+        "ALLOW — the policy gate permits this action.",
+        "",
+        *header,
+        "",
+    ]
+    if cycle:
+        cycle_decision = "-"
+        result = cycle.get("audit_result")
+        if isinstance(result, dict):
+            cycle_decision = str(result.get("decision") or "-")
+        lines.extend(
+            [
+                "This permission rests on:",
+                f"  audit cycle:   {cycle.get('cycle_id', '?')} (FINAL, decision {cycle_decision})",
+                f"  commit:        {science_commit}",
+                f"  manifest:      {manifest_sha256}",
+                "  plus: no active blocker covering this action, and an unexpired authorization "
+                "carrying policy + budget + PI approval for exactly this actor/action/commit/manifest.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "This permission does NOT rest on an audit cycle: no FINAL cycle for "
+                f"{science_commit} is present in {ctx.controller_state_path}. That is what the "
+                "engine does for actions it classifies as low-risk — it permits them without an "
+                "audit gate. Do not read this ALLOW as an audited approval of the commit.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "SCOPE: this is an authorization to proceed with THIS action, at THIS commit, against "
+            "THIS evidence manifest, once. It does not carry over to any other action, any later "
+            "commit, a repeat run after the tree changes, or a wider scope. Ask again each time.",
+            "",
+            f"ledger: 1 line appended to {ctx.action_ledger_path}",
+            "",
+            ADVISORY_NOTE,
+        ]
+    )
+    return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------
 # tool registry
 # --------------------------------------------------------------------------
 TOOLS: list[dict[str, Any]] = [
@@ -1195,6 +1689,56 @@ TOOLS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
         "handler": tool_notify_pi,
+    },
+    {
+        "name": "check_action",
+        "description": (
+            "高风险动作前先问闸门 / Consult the controller's fail-closed policy engine "
+            "(POST /actions/check) BEFORE doing anything high-risk: submit_production_job, "
+            "stop_production_job, publish_claim, change_locked_protocol, exclude_scientific_data, "
+            "increase_budget, operate_instrument. It answers ALLOW or DENY with the engine's own "
+            "reason codes, and every consultation is appended to state/action_ledger.jsonl. "
+            "science_commit defaults to the science repo HEAD; manifest_sha256 defaults to "
+            "evidence_manifest_sha256 in .audit/audit_request.json at that commit — if a default "
+            "cannot be read the call fails loudly rather than guessing a hash. Unrecognised action "
+            "names are DENIED (UNKNOWN_ACTION), which is the intended fail-closed default. "
+            "HONEST LIMIT: this gate is ADVISORY AT THE POINT OF CALL — it is reachable and every "
+            "consultation is logged, but it is not mechanically unbypassable; a caller that never "
+            "calls it is not stopped by it. It is not enforcement. Call it anyway, and obey a DENY."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["action"],
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The action you are about to take, e.g. submit_production_job "
+                    "or publish_claim. Not an enum on purpose: the engine must see the name you "
+                    "actually mean and deny it if it does not recognise it.",
+                },
+                "science_commit": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{40}$",
+                    "description": "Optional. Full 40-hex science commit the action rests on. "
+                    "Default: current HEAD of the configured science repo.",
+                },
+                "manifest_sha256": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{64}$",
+                    "description": "Optional. 64-hex evidence-manifest SHA-256. Default: "
+                    "evidence_manifest_sha256 read from .audit/audit_request.json at that commit.",
+                },
+                "intent": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Optional one line on what you are about to do; recorded "
+                    "verbatim in the action ledger next to the decision.",
+                },
+            },
+            "additionalProperties": False,
+        },
+        "handler": tool_check_action,
     },
 ]
 

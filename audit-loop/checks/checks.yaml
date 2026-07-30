@@ -293,6 +293,27 @@ test_env:
   MPLBACKEND: "Agg"
   PYTHONDONTWRITEBYTECODE: "1"
 
+# ----------------------------------------------------------------------------------------
+# C-TREESAFE-001 -- tracked symlinks and gitlinks in the audited tree
+# ----------------------------------------------------------------------------------------
+# The auditor reads the audited commit through a real `git worktree` checkout and may open
+# any path inside it. A tracked symlink (git mode 120000) is materialised by that checkout,
+# so what is read through it is NOT a committed blob: a link whose target leaves the
+# repository turns "read a file in the audited tree" into "read a file on the audit host",
+# and those bytes may then be sent to an external model API. A gitlink (mode 160000) pins a
+# submodule commit whose content is not part of the audited tree at all. Both are rejected
+# by default: this is supply-chain and exfiltration surface, not style.
+#
+# Exact repo-relative paths (NOT globs) permitted to be a symlink or a gitlink. Empty by
+# default. Each entry is an explicit, reviewable decision that one specific link is safe,
+# and adding one changes checks_sha256, so the exception is visible in every later report.
+treesafe_allowed_paths: []
+
+# When false, gitlink entries are counted and named in the detail line but are not
+# violations -- for a repository that legitimately vendors a submodule. Symlinks are
+# rejected either way, since only their target decides what a checkout actually exposes.
+treesafe_reject_gitlinks: true
+
 # --- C-INJECT-001 -------------------------------------------------------------
 # Audited content is data, never instructions. A tracked file telling the auditor
 # to suppress or downgrade a finding is a process defect regardless of whether the

@@ -89,6 +89,11 @@ def audit_artifacts(
         "decision": decision,
         "findings": findings,
         "verified_closed_findings": verified_closed_findings or [],
+        "coverage": {
+            "evidence_manifest_sha256": cycle.evidence_manifest_sha256,
+            "paths_examined": 3,
+            "method": "fixture",
+        },
     }
     contents = {
         "audit_report.md": f"# Audit Report\n\nDecision: {decision}\n",
@@ -99,6 +104,7 @@ def audit_artifacts(
                 "audited_commit": cycle.science_commit,
                 "runner": "fake-codex",
                 "model": "fake-model",
+                "prompt_sha256": "d" * 64,
                 "started_at": "2026-07-30T00:00:00+00:00",
                 "completed_at": "2026-07-30T00:01:00+00:00",
                 "policy_bundle": policy_bundle(),

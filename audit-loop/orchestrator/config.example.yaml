@@ -39,6 +39,8 @@ severity_floors:
   C-HASH-001: CRITICAL     # a declared hash that resolves to nothing
   C-HASH-002: CRITICAL     # a manifest naming a path that does not exist
   C-INJECT-001: CRITICAL   # audited content trying to direct the auditor
+  C-TREESAFE-001: CRITICAL # a tracked symlink or gitlink: content the audited
+                           # commit does not actually contain, reachable by the auditor
 
 retention:
   # Cycle directories hold Codex's scratch clones; one measured 49 MB, so an

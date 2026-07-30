@@ -358,6 +358,11 @@ class Orchestrator:
             return True
         if self._over_budget():
             return True
+        escalated = self._open_escalations()
+        if escalated:
+            log(f"deferring {sha[:12]}: escalation(s) {', '.join(escalated)} await the PI; "
+                "auto re-audit is paused until acknowledge_escalation")
+            return True
         stalled = self._awaiting_disposition()
         if stalled:
             self._note_deferral(stalled, sha)
@@ -730,13 +735,22 @@ class Orchestrator:
                         "Codex modified the read-only worktree — audit run discarded")
             raise RuntimeError(f"worktree not clean after codex run: status={status!r} head={head}")
 
-    def _run_tier0(self, cycle_dir: Path, worktree: Path, sha: str) -> None:
-        state = self.controller_state()
-        final_commits = sorted(
-            (c["science_commit"], c["cycle_id"])
-            for c in state.get("cycles", {}).values() if c.get("status") == "FINAL"
+    def tier0_base_commit(self) -> str:
+        """The commit the diff-scoped checks measure from: the newest FINAL cycle.
+
+        Ordered by cycle_id, which the controller mints monotonically. Ordering by
+        commit SHA instead — as this did — sorts hex strings, so with more than one
+        FINAL cycle the diff window silently spans the wrong range.
+        """
+        finals = sorted(
+            (c["cycle_id"], c["science_commit"])
+            for c in self.controller_state().get("cycles", {}).values()
+            if c.get("status") == "FINAL"
         )
-        base = final_commits[-1][0] if final_commits else "NONE"
+        return finals[-1][1] if finals else "NONE"
+
+    def _run_tier0(self, cycle_dir: Path, worktree: Path, sha: str) -> None:
+        base = self.tier0_base_commit()
         checks = self.loop_root / "checks"
         result = sh([
             self.venv_python, str(checks / "deterministic_checks.py"),
@@ -812,6 +826,11 @@ class Orchestrator:
   每个 finding:finding_id 形如 F-NNN(不得复用既往 cycle 已关闭的 ID;沿用未关闭 finding 的原 ID),
   severity ∈ CRITICAL/HIGH/MEDIUM/LOW/INFO,status 恒为 "OPEN"。
   severity 语义遵循宪法 §12:只有 CRITICAL/HIGH 是阻断级;MEDIUM/LOW/INFO 是非阻断意见。
+  **coverage 必填**:evidence_manifest_sha256(照抄 cycle_context.json 的
+  evidence_manifest_sha256)、paths_examined(你实际查看的路径数,正整数)、method(一句话说明
+  你如何选择与遍历这些路径),可选 not_examined(明确未覆盖的部分)。
+  非空的引用列表不等于覆盖:一份"什么都没看"的合规 PASS 不是裁决。诚实申报未覆盖部分
+  不会被惩罚——隐瞒才会。
   decision=BLOCK 时每个 finding 必须带 blocked_scopes(从以下取值:submit_production_job,
   stop_production_job, publish_claim, change_locked_protocol, exclude_scientific_data,
   increase_budget, operate_instrument,或 "*");非 BLOCK 时任何 finding 不得带 blocked_scopes。
@@ -829,9 +848,18 @@ class Orchestrator:
   才可写入 verified_closed_findings(finding_id + 非空 verification_summary);验证不了就保持沉默。
 - out/codex_run_metadata.json — 符合 schema;cycle_id/audited_commit 同上;runner 写 "codex-cli";
   model 写你实际使用的模型标识;started_at/completed_at 为真实 ISO-8601 UTC 时间。
+  **prompt_sha256 必填**:本提示词文件 ./prompt_attempt<N>.txt 的 SHA-256(命令见下),
+  一份说不出自己由哪条提示词产生的回执无法复核。可选 provider
+  ——能填就填,填不了就省略,不要编造。
+  可选 provider 字段名为 name / request_id / response_sha256。
   **policy_bundle 必填,逐字复制 ./policy_bundle.json 的内容**——一份说不出自己依据哪套宪法、
   哪版规则手册、哪版检查器的回执,不能证明任何事。编排器会逐字段比对,不符即整轮作废。
 - out/report_manifest.json — 符合 schema;files 覆盖其余三个文件,sha256 为各文件原始字节的 SHA-256。
+
+## 计算 prompt_sha256
+```
+shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
+```
 
 ## 纪律
 - 不修改 worktree、不 commit、不 push、不触碰远端任务(宪法 §1.2 绝对禁区)。
@@ -896,15 +924,22 @@ class Orchestrator:
                          "SIMULATED by --simulate-codex; not a real audit"],
         }]
         decision = "BLOCK" if hard_fails else "PASS_WITH_CAVEATS"
+        cycle = self.controller_state().get("cycles", {}).get(cycle_id) or {}
         result = {"cycle_id": cycle_id, "audited_commit": sha,
                   "decision": decision, "findings": findings,
+                  "coverage": {
+                      "evidence_manifest_sha256": cycle.get("evidence_manifest_sha256", "0" * 64),
+                      "paths_examined": 1,
+                      "method": "SIMULATED by --simulate-codex; nothing was examined"},
                   "summary": "SIMULATED audit produced by --simulate-codex; not a real audit."}
         report = (f"## Audit decision: {decision}\n\nDecision: {decision}\n\n"
                   f"Audited commit: {sha}\n\nSIMULATED report (pipeline selftest only; "
                   f"tier0 hard fails: {hard_fails}).\n\n### Execution declaration\n"
                   "- Codex repository changes: NONE\n- Codex remote/HPC/GPU/instrument actions: NONE\n")
+        prompts = sorted(cycle_dir.glob("prompt_attempt*.txt"))
         metadata = {"cycle_id": cycle_id, "audited_commit": sha, "runner": "simulated-codex",
                     "model": "simulated", "started_at": now_iso(), "completed_at": now_iso(),
+                    "prompt_sha256": hashlib.sha256(prompts[-1].read_bytes()).hexdigest(),
                     "policy_bundle": json.loads(
                         (cycle_dir / "policy_bundle.json").read_text(encoding="utf-8"))}
         (out_dir / "audit_report.md").write_text(report, encoding="utf-8")
@@ -946,6 +981,8 @@ class Orchestrator:
             errors.append("Decision line in markdown disagrees with audit_result.json")
         errors.extend(self._enforce_tier0_grading(cycle_id, result))
         errors.extend(self._enforce_policy_bundle(cycle_id, metadata))
+        errors.extend(self._enforce_coverage(cycle_id, result))
+        errors.extend(self._enforce_prompt_binding(cycle_id, metadata))
         for name, entry in (manifest.get("files") or {}).items():
             path = out_dir / name
             if not path.exists():
@@ -1097,6 +1134,55 @@ class Orchestrator:
             errors.append("policy_bundle.calibration_sha256 does not match the "
                           "calibration material staged for this cycle")
         return errors
+
+    def _enforce_coverage(self, cycle_id: str, result: dict[str, Any]) -> list[str]:
+        """A verdict must say what it examined, bound to this cycle's evidence.
+
+        A non-empty citation list is not coverage: an auditor that read nothing and
+        emitted a well-formed PASS was previously accepted whenever Tier-0 was
+        clean. The declared manifest must be this cycle's, so a coverage claim
+        cannot be copied from another audit.
+        """
+        coverage = result.get("coverage")
+        if not isinstance(coverage, dict):
+            return ["audit_result declares no coverage; a verdict over an unexamined "
+                    "tree is not a verdict"]
+        cycle = self.controller_state().get("cycles", {}).get(cycle_id) or {}
+        expected = str(cycle.get("evidence_manifest_sha256") or "").lower()
+        declared = str(coverage.get("evidence_manifest_sha256") or "").lower()
+        errors: list[str] = []
+        if not expected:
+            # Nothing to bind against is a reason to refuse, not to wave through.
+            errors.append(f"cycle {cycle_id} has no recorded evidence manifest, so a "
+                          "coverage claim cannot be bound to it")
+        elif declared != expected:
+            errors.append(
+                f"coverage.evidence_manifest_sha256 is {declared[:12]}… but this cycle's "
+                f"evidence manifest is {expected[:12]}…")
+        examined = coverage.get("paths_examined")
+        if not isinstance(examined, int) or examined < 1:
+            errors.append("coverage.paths_examined must be a positive count")
+        return errors
+
+    def _enforce_prompt_binding(self, cycle_id: str, metadata: dict[str, Any]) -> list[str]:
+        """The receipt must name the exact prompt that produced it."""
+        prompts = sorted((self.cycles_dir / cycle_id).glob("prompt_attempt*.txt"))
+        if not prompts:
+            return ["no prompt was staged for this cycle"]
+        allowed = {hashlib.sha256(path.read_bytes()).hexdigest() for path in prompts}
+        declared = str(metadata.get("prompt_sha256") or "").lower()
+        if declared not in allowed:
+            return [f"prompt_sha256 {declared[:12]}… matches none of the "
+                    f"{len(allowed)} prompt(s) this cycle issued"]
+        return []
+
+    def _open_escalations(self) -> list[str]:
+        try:
+            record = json.loads((self.state_dir / "escalations.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        return sorted(e["escalation_id"] for e in record.get("escalations", [])
+                      if e.get("status") == "OPEN")
 
     def _commit_and_finalize(self, cycle_id: str, out_dir: Path) -> list[str] | None:
         """Commit artifacts to the Audit Repo and drive controller validation.

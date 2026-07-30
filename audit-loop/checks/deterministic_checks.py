@@ -917,6 +917,189 @@ def c_inject_001(ctx: Ctx) -> dict[str, Any]:
     )
 
 
+# --------------------------------------------------------------------------------------
+# tree safety (C-TREESAFE-001)
+# --------------------------------------------------------------------------------------
+
+SYMLINK_MODE = "120000"
+GITLINK_MODE = "160000"
+
+
+@dataclass(frozen=True)
+class TreeEntry:
+    mode: str
+    obj_type: str
+    sha: str
+    path: str
+
+
+def tree_entries(ctx: Ctx) -> list[TreeEntry]:
+    """Every entry of the audited tree paired with its git mode.
+
+    ``ls-tree -r -z`` so paths arrive raw: never quoted, never escaped, so a path holding a
+    newline or a quote cannot break the parse. The committed tree is the authority and the
+    worktree is never stat'ed, so this reads correctly even when no checkout exists.
+    """
+    raw = ctx.git("ls-tree", "-r", "-z", ctx.audited_commit).stdout
+    entries: list[TreeEntry] = []
+    for record in raw.split(b"\x00"):
+        if not record:
+            continue
+        meta, sep, path = record.partition(b"\t")
+        if not sep:
+            continue
+        fields = meta.split()
+        if len(fields) < 3:
+            continue
+        entries.append(
+            TreeEntry(
+                mode=fields[0].decode("ascii", "replace"),
+                obj_type=fields[1].decode("ascii", "replace"),
+                sha=fields[2].decode("ascii", "replace"),
+                path=path.decode("utf-8", "surrogateescape"),
+            )
+        )
+    return entries
+
+
+def symlink_target_escapes(link_path: str, target: str) -> tuple[bool, str]:
+    """Resolve a symlink target against the link's own directory.
+
+    Returns ``(escapes, resolved)``. An absolute target escapes by construction; a relative
+    one escapes when its normalised form walks above the repository root. Purely textual:
+    the target is the committed blob's bytes, and nothing on the audit host is consulted.
+    """
+    if target.startswith("/"):
+        return True, target
+    parent = os.path.dirname(link_path)
+    joined = f"{parent}/{target}" if parent else target
+    resolved = posix_normpath(joined)
+    if resolved is None:
+        return True, joined
+    return False, resolved or "."
+
+
+def treesafe_reproduce(ctx: Ctx, path: str, read_target: bool) -> str:
+    """Re-derive one entry's mode, and for a symlink the target blob, from the git dir."""
+    quoted = shlex.quote(path)
+    listing = f"git --git-dir={ctx.gd()} ls-tree -r {ctx.audited_commit} -- {quoted}"
+    if not read_target:
+        return listing
+    return (
+        f"{listing} ; git --git-dir={ctx.gd()} cat-file blob "
+        f"{ctx.audited_commit}:{quoted} ; echo"
+    )
+
+
+@check("C-TREESAFE-001", "Reject tracked symlinks and gitlinks in the audited tree", "HARD")
+def c_treesafe_001(ctx: Ctx) -> dict[str, Any]:
+    """A tracked link is a read path whose content the audited commit does not contain.
+
+    The auditor reads the audited commit through a real ``git worktree`` checkout and may
+    open any path inside it. A tracked symlink (git mode ``120000``) is materialised by
+    that checkout, so what is read through it is not a committed blob: a target leaving the
+    repository turns "read a file in the audited tree" into "read a file on the audit
+    host", whose bytes may then be sent to an external model API. A gitlink (mode
+    ``160000``) pins a submodule commit whose content is likewise not part of the audited
+    tree. Both are supply-chain surface, not style.
+
+    Mechanism only: the mode comes from the commit, never from the filesystem, and every
+    exception is a path listed verbatim in ``treesafe_allowed_paths``.
+    """
+    allowed = {
+        norm
+        for norm in (norm_repo_path(str(p)) for p in (ctx.config.get("treesafe_allowed_paths") or []))
+        if norm
+    }
+    reject_gitlinks = bool(ctx.cfg("treesafe_reject_gitlinks", True))
+
+    entries = tree_entries(ctx)
+    violations: list[dict[str, Any]] = []
+    n_symlinks = n_escaping = n_gitlinks = n_allowlisted = 0
+    expected_mode = (
+        "a regular file (git mode 100644/100755), or an explicit treesafe_allowed_paths entry"
+    )
+
+    for entry in sorted(entries, key=lambda e: e.path):
+        if entry.mode == GITLINK_MODE:
+            n_gitlinks += 1
+            if entry.path in allowed:
+                n_allowlisted += 1
+                continue
+            if not reject_gitlinks:
+                continue
+            record = violation(
+                entry.path,
+                "tracked gitlink (git mode 160000): a submodule pins a commit of another "
+                "repository, so the content this path yields in a checkout is not part of "
+                "the audited tree and is covered by no check here",
+                expected=expected_mode,
+                actual=f"mode 160000 -> submodule commit {entry.sha}",
+            )
+            record["reproduce"] = treesafe_reproduce(ctx, entry.path, read_target=False)
+            violations.append(record)
+            continue
+        if entry.mode != SYMLINK_MODE:
+            continue
+
+        n_symlinks += 1
+        # The blob of a 120000 entry IS the link target: bytes, verbatim, no trailing newline.
+        blob = ctx.git("cat-file", "blob", entry.sha, check=False)
+        readable = blob.returncode == 0
+        target = blob.stdout.decode("utf-8", "surrogateescape") if readable else ""
+        escapes, resolved = symlink_target_escapes(entry.path, target) if readable else (False, "")
+        if escapes:
+            n_escaping += 1
+        if entry.path in allowed:
+            n_allowlisted += 1
+            continue
+
+        shown = target[:200] + ("..." if len(target) > 200 else "")
+        if not readable:
+            message = (
+                "tracked symlink (git mode 120000) whose target blob could not be read, so "
+                "what a checkout would materialise here cannot be established"
+            )
+            actual = f"mode 120000 -> blob {entry.sha} unreadable"
+        elif escapes:
+            message = (
+                f"tracked symlink (git mode 120000) whose target {shown!r} leaves the "
+                f"repository root: a git worktree checkout materialises it, so an auditor "
+                f"reading this path reads a file on the audit host that is not a committed "
+                f"blob of the audited tree. This is the dangerous class -- an exfiltration "
+                f"and supply-chain path out of the audited commit"
+            )
+            actual = f"mode 120000 -> {shown!r} (escapes the repository root)"
+        else:
+            message = (
+                f"tracked symlink (git mode 120000) resolving inside the repository to "
+                f"{resolved!r}: its committed content is a link target, not a file blob, so "
+                f"what is read through this path is decided by checkout behaviour rather "
+                f"than by the audited tree"
+            )
+            actual = f"mode 120000 -> {shown!r} (resolves to {resolved})"
+        record = violation(entry.path, message, expected=expected_mode, actual=actual)
+        record["reproduce"] = treesafe_reproduce(ctx, entry.path, read_target=True)
+        violations.append(record)
+
+    detail = (
+        f"Examined the git mode of {len(entries)} tracked tree entr(ies) at the audited "
+        f"commit, read from git ls-tree and never from a checkout; {n_symlinks} symlink(s) "
+        f"(mode 120000), {n_escaping} of them resolving outside the repository root, and "
+        f"{n_gitlinks} gitlink(s) (mode 160000); {n_allowlisted} entr(ies) matched "
+        f"treesafe_allowed_paths and were not reported; {len(violations)} violation(s)."
+    )
+    if not reject_gitlinks:
+        detail += (
+            " treesafe_reject_gitlinks is false, so gitlink(s) were counted but not reported."
+        )
+    census = (
+        f"git --git-dir={ctx.gd()} ls-tree -r {ctx.audited_commit} "
+        f"| awk '{{print $1}}' | sort | uniq -c"
+    )
+    return result("FAIL" if violations else "PASS", detail, census, violations)
+
+
 @check("C-BANNER-001", "Require the superseded banner in superseded files", "HARD")
 def c_banner_001(ctx: Ctx) -> dict[str, Any]:
     targets = ctx.files_matching("superseded_globs")
