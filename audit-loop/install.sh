@@ -71,7 +71,11 @@ derive_full_name() {  # owner/repo from a git remote, else <fallback>
     # strip trailing .git, then keep the last two path segments (owner/repo)
     url="${url%.git}"
     url="${url%/}"
-    local name="${url##*/}" owner_part="${url%/*}" owner="${owner_part##*[:/]}"
+    # Separate statements: within one `local`, later RHS cannot see earlier names.
+    local name owner_part owner
+    name="${url##*/}"
+    owner_part="${url%/*}"
+    owner="${owner_part##*[:/]}"
     if [ -n "$owner" ] && [ -n "$name" ] && [ "$owner" != "$name" ]; then
       echo "$owner/$name"
     else
