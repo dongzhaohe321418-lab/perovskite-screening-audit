@@ -166,3 +166,21 @@ def test_unknown_action_is_denied_not_allowed(tmp_path):
 
     assert response.decision == "DENY"
     assert response.reason_codes == ["UNKNOWN_ACTION"]
+
+
+def test_landing_a_fix_is_permitted_even_while_blockers_are_active(tmp_path):
+    """The gate must not block the work that clears the gate.
+
+    ACCEPT_AND_FIX requires a new science commit, and every such push is itself
+    audited before anything downstream may act on it. Denying it would deadlock
+    the only path by which a finding can be verified closed.
+    """
+    storage, _, _ = final_blocked_cycle(tmp_path)
+    policy = PolicyEngine(storage)
+
+    for action in ("commit_fix", "push_fix", "commit_and_push_fixes", "submit_disposition"):
+        response = policy.check(action_request(action=action))
+        assert response.decision == "ALLOW", (action, response.reason_codes)
+
+    assert policy.check(action_request(action="submit_production_job")).decision == "DENY"
+    assert policy.check(action_request(action="rm_rf_everything")).decision == "DENY"
