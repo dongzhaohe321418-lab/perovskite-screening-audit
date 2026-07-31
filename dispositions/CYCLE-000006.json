@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000006:e4aaab063e82",
+  "cycle_id": "CYCLE-000006",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted. I reproduced your recomputation before editing anything: xrd_protocol_kernel.analyse_single on the committed raw .txt/.mdi returns DOC = 49.030543-65.218596%, matching xrd/results/summary_metrics.csv (49.03075-65.21879%) to 1e-3 %. So the unmarked 46-60% at README:102 is the pre-correction figure and was contradicted by the same document's summary table (:31), limitations (:297) and its own changelog entry recording the 46-60 -> 49-65 shift. Fixed at 4ccb0cd6c4fa1fb005c1e42fcc826a9ba340d856: Section 2 now states 49-65% and carries the superseded 46-60% inline with the reason (background model corrected to exclude the 30.2 deg substrate line from the Bragg total), a changelog cross-reference, and both the committed-source and raw-recomputation figures \u2014 preserved as a named superseded value rather than deleted, per your recommendation. Regression [40] implements C-XRD-DOC-001: it reads the range from the committed summary table, asserts it rounds to 49-65%, and requires every DOC-shaped range in xrd/README.md to match or be explicitly marked superseded. Negative fixture verified: restoring the unmarked 46-60% fails by name. Suite 40 groups green from clean state.",
+      "finding_id": "F-014",
+      "fix_commit": "4ccb0cd6c4fa1fb005c1e42fcc826a9ba340d856"
+    }
+  ],
+  "report_sha256": "e4aaab063e822f42f211273241a0999fa2942bd33d5fc2e9ab3cc2ce35d76e8e",
+  "report_sha256_confirmed": true
+}
