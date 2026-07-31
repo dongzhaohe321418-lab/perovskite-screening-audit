@@ -1,0 +1,50 @@
+{
+  "audit_report_id": "CYCLE-000001:e4e6a3586dbc",
+  "cycle_id": "CYCLE-000001",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "AUDIT_CORRECTIONS_CYCLE1.md ties each of the 3 empty commits (8556dd,08376f,363170b) to its committed evidence (state_id_img{2,3,4}.json, verified by regression group [35]) or marks it a no-op; history preserved, not rewritten.",
+      "finding_id": "F-001",
+      "fix_commit": "bfece650948a2b08c4ed6a818015b1f493561fed"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Regenerated 26_neb_harness.py entry in both q0/q1 staging manifests from committed source: sha256 2de0057fc5c81614d7f5cae85c129f22d523a2a093d00271baf468dab339132d, size 12243 (was b3cc..f69e/12910). Verify: shasum -a 256 scripts/26_neb_harness.py.",
+      "finding_id": "F-002",
+      "fix_commit": "bfece650948a2b08c4ed6a818015b1f493561fed"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "14 parsed-output sources: path-shaped keys renamed (indir->source_dir_not_committed, file->source_filename_not_committed) so no key- or slash-value resolver resolves an absent committed path; provenance_status=RAW_SOURCE_ABSENT_NOT_REPRODUCIBLE. 1 q1 input: key local_source->local_source_absent_not_committed, submission_status BLOCKED_DO_NOT_SUBMIT; note records two verified facts - the path q1_initial_relaxed.extxyz never existed in any commit (git log --all --diff-filter=A empty) and its recorded sha256 7af20ebb.. is the q0 file q0_initial_relaxed.extxyz's hash.",
+      "finding_id": "F-003",
+      "fix_commit": "bfece650948a2b08c4ed6a818015b1f493561fed"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "EXPERIMENT_AUDIT.md 1.9 reconciled to one current state: gate ALL FIVE CONDITIONS PASS (q0_final QE convergence block in q0/q0_final_ns1.out.gz, energy err 9.8e-05 Ry, grad 1.6e-03; state-ID recomputable per [35]; harness round-trip [31]), launch NOT performed (no committed job outputs, q1 input absent). 2026-07-28 launch record retained as historical/unverified. Stale 'two of five' passage in Q0_POLARON_EXCLUDED.md marked SUPERSEDED/historical.",
+      "finding_id": "F-004",
+      "fix_commit": "bfece650948a2b08c4ed6a818015b1f493561fed"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Path-resolution convention recorded in AUDIT_CORRECTIONS_CYCLE1.md (root-relative then file-dir-relative; anything else that is not an F-003 absent artifact is a true dead link). Remaining true dead links track F-003 closure.",
+      "finding_id": "F-005",
+      "fix_commit": "bfece650948a2b08c4ed6a818015b1f493561fed"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Q3 conclusion in RESULTS_INDEX.md demoted to UNVERIFIED / NOT CITABLE and removed as gate evidence; raw sources (hpc/ outputs, P1/P2/ELAS/POL) not committed so quoted values are not independently recomputable. Restoring citability requires committing raw outputs+manifests+derivation.",
+      "finding_id": "F-006",
+      "fix_commit": "bfece650948a2b08c4ed6a818015b1f493561fed"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Regression-suite group count corrected to 36 (measured: python3 scripts/20_test_checks.py | grep -cE '^[[0-9]+]' -> 36) in README.md:16, results/objective2/CURRENT_STATUS.md:42, EXPERIMENT_AUDIT.md (regression line + analysis-code list).",
+      "finding_id": "F-007",
+      "fix_commit": "bfece650948a2b08c4ed6a818015b1f493561fed"
+    }
+  ],
+  "report_sha256": "e4e6a3586dbca9d812c3c9a8a8696befcb4d21b5e582c2373a19b424bb85ff71",
+  "report_sha256_confirmed": true
+}
