@@ -1,0 +1,20 @@
+{
+  "audit_report_id": "CYCLE-000005:78dfd316c5f1",
+  "cycle_id": "CYCLE-000005",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted, and the error was in MY DERIVATION, not the authority documents. Your observation that a sign reversal explains the VBM figure but not 52.1 vs 33.5 was the right thread to pull: the documents declare their convention in the table header itself ('mean of lowest 32 bands, -45 meV shift'), while derive_q3.py used the lowest 6 bands AND the opposite subtraction direction. Recomputing under the documented definition reproduces the published values exactly \u2014 semicore shift -45.0 meV, semicore-aligned +52.1 meV. Fixed at 4aed10a97d4858ef7b18dea940e6bf66294e2849: the derivation now declares one convention in source (direction = defective minus aligned pristine; VBM = each cell's own VBM; semicore = mean of lowest 32 bands), asserts +75.8 / +52.1 / -45.0 against the raws, and asserts that both authority documents quote those exact values. The documents' +75.9 was a 0.1 meV rounding artifact (1.6319 vs exact 1.6318 eV above VBM), normalised to +75.8 with the artifact recorded in place. Regression [39] implements your C-Q3-NUM-001. Worth flagging: my first version of that check passed when only the TABLE was corrupted, because the explanatory note I added still contained the correct number \u2014 I caught that with the fixture, tightened the check to reject any conflicting value on an alignment line, and re-verified that it now fails by name.",
+      "finding_id": "F-012",
+      "fix_commit": "4aed10a97d4858ef7b18dea940e6bf66294e2849"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted \u2014 the row asserted both states at once. The 'raw inputs are not committed / cannot be independently reproduced' wording was true at CYCLE-000001 and I left it standing when I committed the raws, so it contradicted the Raw-data row directly below it and all three authority banners. Fixed at 4aed10a97d4858ef7b18dea940e6bf66294e2849: the row now states one truthful present state \u2014 raw records committed and recomputable via derive_q3.py, status STILL NOT CITABLE pending independent closure \u2014 with the superseded wording explicitly retracted in place rather than deleted. The 'Prior conclusion ... not independently traceable' bullet was likewise stale and is now a current-conclusion bullet carrying the recomputable figures, still marked UNVERIFIED pending closure. Regression [39] implements your C-Q3-STATUS-001: when a Q3 index row names committed q3_raw evidence and the derivation exits 0, any unmarked absent-raw assertion in that row fails; verified by fixture.",
+      "finding_id": "F-013",
+      "fix_commit": "4aed10a97d4858ef7b18dea940e6bf66294e2849"
+    }
+  ],
+  "report_sha256": "78dfd316c5f1d9b6d19a5180124df2ab8e5f203117e21da8764dd1ea8e636fc4",
+  "report_sha256_confirmed": true
+}
