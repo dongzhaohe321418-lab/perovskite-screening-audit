@@ -6,13 +6,21 @@ what the gate permitted, and what each cycle cost. Generated; do not edit.
 
 | cycle | audited commit | decision | findings | disposition | closed here |
 |---|---|---|---|---|---|
-| [CYCLE-000009](cycles/CYCLE-000009.md) | `cccccccccccc` | BLOCK | 1 | TASK_CREATED | 0 |
+| [CYCLE-000001](cycles/CYCLE-000001.md) | `81fd505e71b8` | BLOCK | 7 | RECORDED | 0 |
+| [CYCLE-000002](cycles/CYCLE-000002.md) | `bfece650948a` | BLOCK | 4 | RECORDED | 5 |
+| [CYCLE-000003](cycles/CYCLE-000003.md) | `ddaca3fc36e3` | AUDIT_OUTPUT_INVALID | 0 | NOT_STARTED | 0 |
+| [CYCLE-000004](cycles/CYCLE-000004.md) | `746564b69191` | BLOCK | 3 | RECORDED | 0 |
+| [CYCLE-000005](cycles/CYCLE-000005.md) | `b7de47840a74` | BLOCK | 2 | RECORDED | 3 |
+| [CYCLE-000006](cycles/CYCLE-000006.md) | `4aed10a97d48` | BLOCK | 1 | RECORDED | 2 |
+| [CYCLE-000007](cycles/CYCLE-000007.md) | `4ccb0cd6c4fa` | PASS_WITH_CAVEATS | 1 | RECORDED | 1 |
+| [CYCLE-000008](cycles/CYCLE-000008.md) | `af0dc58713b9` | PASS | 0 | INVALID | 1 |
+| [CYCLE-000009](cycles/CYCLE-000009.md) | `a75e2f7f2d0d` | AUDIT_OUTPUT_INVALID | 0 | NOT_STARTED | 0 |
 
 ## Totals
 
-- cycles finalized: 1
-- findings verified closed: 0
-- audit input tokens: 0
+- cycles finalized: 7
+- findings verified closed: 12
+- audit input tokens: 21,284,471
 
 ## Files
 
@@ -20,3 +28,4 @@ what the gate permitted, and what each cycle cost. Generated; do not edit.
 - `dispositions/CYCLE-*.json` — the executor's answer, verbatim as the controller accepted it
 - `action_ledger.jsonl` — every admission-gate consultation and its decision
 - `escalations.json` — findings escalated to the principal
+- `INCIDENTS.md` — defects in the supervision system itself, both sides
