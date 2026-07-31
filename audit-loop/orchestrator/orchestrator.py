@@ -316,6 +316,7 @@ class Orchestrator:
         if etype == "science_commit":
             return self.handle_science_commit(event["sha"])
         if etype == "disposition_recorded":
+            self._publish_ledger()
             self.notify("Audit Loop", f"disposition recorded for {event.get('cycle_id')}; "
                         "next commit starts the next cycle")
             return False
@@ -1253,6 +1254,7 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
         tmp.write_text(json.dumps(pending, indent=2), encoding="utf-8")
         tmp.replace(self.pending_dir / f"{cycle_id}.json")
         self._write_status_page()
+        self._publish_ledger()
         decision = result.get("decision")
         n_findings = len(pending["finding_ids"])
         self.notify("Audit Loop: report ready",
@@ -1305,6 +1307,22 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
             lines.append("- Nothing. No open escalations, nothing awaiting disposition.")
         (self.state_dir / "AUDIT_STATUS.md").write_text("\n".join(lines) + "\n",
                                                         encoding="utf-8")
+
+    def _publish_ledger(self) -> None:
+        """Push the executor-side record so accountability is public, not local.
+
+        The audit branch carries what the auditor found; without this, what the
+        executor answered and what the gate permitted would exist only on this
+        machine, and the published record would show findings with no answers.
+        """
+        script = self.loop_root / "orchestrator" / "publish_ledger.py"
+        if not script.exists():
+            return
+        result = subprocess.run(
+            [self.venv_python, str(script), "--config", str(self.config_path)],
+            capture_output=True, text=True, timeout=300)
+        line = (result.stdout or result.stderr).strip().splitlines()
+        log(f"ledger: {line[-1] if line else 'no output'}")
 
     # ---------- escalation (constitution 3.4) ----------
 
