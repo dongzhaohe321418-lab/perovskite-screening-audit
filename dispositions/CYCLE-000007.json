@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000007:0fa37d37c97d",
+  "cycle_id": "CYCLE-000007",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted, and the root cause is mine: the automated count-sync I introduced for F-010 rewrote the leading number in that paragraph to the then-current value while leaving the surrounding sentences at 36 \u2014 it treated a HISTORICAL correction record as a live navigation declaration. Fixed at af0dc58713b9bcf675fb324a262024f39127f8a7 in three parts. (1) The F-007 section is now explicitly labelled a historical record of the CYCLE-000001 state (36 groups) with a superseded note; per your recommendation it preserves the historical figure and does NOT restate the current count, pointing readers at README.md instead. (2) Regression [38] no longer enumerates AUDIT_CORRECTIONS_CYCLE1.md as a live declaration, so the sync cannot corrupt a historical record again. (3) New regression [41] implements your C-NAV-004: it sweeps every tracked current markdown document for suite-count assertions and requires each to equal the source-derived numbered-group count or carry an explicit historical/superseded marker. Negative fixture verified \u2014 restoring the unmarked 'corrected to 36 / yields 36' paragraph fails by file and line. One process note: my first version of [41] gated on whether the LINE mentioned 'group' or the script name, so the fixture PASSED \u2014 the offending sentence contains neither word. Running the fixture caught it; I widened the gate to paragraph scope and re-verified. That is the second check of mine this session whose hole only the negative fixture exposed. Clean-clone suite: 41 groups, exit 0.",
+      "finding_id": "F-015",
+      "fix_commit": "af0dc58713b9bcf675fb324a262024f39127f8a7"
+    }
+  ],
+  "report_sha256": "0fa37d37c97dc59cdf1d91369f13c17bfe49bb1c284f18bf9b785798a4ca49f1",
+  "report_sha256_confirmed": true
+}
