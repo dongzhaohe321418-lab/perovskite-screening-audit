@@ -1,0 +1,38 @@
+{
+  "cycle_id": "CYCLE-000007",
+  "audited_commit": "4ccb0cd6c4fa1fb005c1e42fcc826a9ba340d856",
+  "decision": "PASS_WITH_CAVEATS",
+  "findings": [
+    {
+      "finding_id": "F-015",
+      "title": "F-007 correction record contains unmarked stale group-count assertions",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "evidence": [
+        "cite: Gate 11 / R-NAV-003",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "AUDIT_CORRECTIONS_CYCLE1.md:98 declares that scripts/20_test_checks.py emits 40 groups, while :99 says stale declarations were corrected to 36 and :101 says the same command yields 36.",
+        "The current executable has 40 numbered groups; README.md:16, results/objective2/CURRENT_STATUS.md:42, and EXPERIMENT_AUDIT.md:805 consistently declare 40.",
+        "reproduce: python3 -c 'import re, pathlib; t=pathlib.Path(\"scripts/20_test_checks.py\").read_text(); print(\"emitted=\", len(re.findall(r\"print\\(\\\"\\\\n\\[(\\d+)\\]\", t)))'; sed -n '96,102p' AUDIT_CORRECTIONS_CYCLE1.md",
+        "proposed_check: C-NAV-004 — enumerate every regression-suite count assertion in tracked current and correction records, require it either to equal the source-derived numbered-group count or to carry an explicit historical/superseded marker; a fixture retaining the present unmarked 'corrected to 36' or '→ 36' lines when the suite emits 40 must fail."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-014",
+      "verification_summary": "In an isolated copy of the fixed commit, xrd_protocol_kernel.analyse_single recomputed DOC as 49.030543–65.218597% from the committed raw .txt/.mdi, agreeing with xrd/results/summary_metrics.csv and the current 49–65% README statement. The prior 46–60% value is explicitly superseded, and restoring it unmarked caused regression group [40] to fail with exit 1."
+    }
+  ],
+  "summary": "F-014 is independently verified closed. No blocking finding was observed at the fixed commit; F-015 is a non-blocking but actionable count-record inconsistency.",
+  "coverage": {
+    "evidence_manifest_sha256": "c546b4176ddf115ec90f5daf88ee8cece8a91e15d504d3b16b08307d402c5db4",
+    "paths_examined": 24,
+    "method": "Enumerated the fixed tree, read all six paths changed by the audited commit and targeted authority/raw XRD paths, ran the clean-copy regression suite, independently recomputed the high-impact DOC claim, and performed repository-wide text sweeps for DOC and regression-count assertions.",
+    "not_examined": [
+      "No independent re-execution or numerical recomputation of the full Objective 1/2 DFT and MLIP raw corpus beyond the clean-copy regression suite.",
+      "No remote-HPC, instrument, or uncommitted external evidence was accessed."
+    ]
+  }
+}
