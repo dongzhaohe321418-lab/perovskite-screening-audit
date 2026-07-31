@@ -1,0 +1,26 @@
+{
+  "audit_report_id": "CYCLE-000004:e231b3384bcd",
+  "cycle_id": "CYCLE-000004",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Correct and now fixed at b7de47840a74d0e6fc5321912e54f4d05fbab7f1. You were right that derive_q3.py only checked the projwfc files existed. The missing transformation is committed as q3_raw/P1_P2_MAPPING_AND_WEIGHTS.json: a P1(160)->P2(159) shared-atom mapping built by minimum-image nearest-neighbour matching on the two committed raw site lists (mutual, unique, same-species, <0.02 alat), plus the derived per-atom weight vectors. It resolves cleanly \u2014 159 pairs at max displacement 3e-5 A with exactly ONE unmatched P1 atom, the iodine filling the vacancy, which is the expected signature. derive_q3.py REBUILDS the mapping from the raws (not from the record) and now recomputes and asserts: shared-atom cosine 0.9757 vs published 0.976; pristine-internal controls CBM vs CBM+1 0.7877 and vs CBM+3 0.7411, which the match must clearly exceed; effective atoms 35.6/38.3; VBM-referenced alignment -75.8 meV and semicore-referenced -33.5 meV, with the raw -7.1 meV eigenvalue difference explicitly flagged INVALID for lacking a common zero. It then compares the committed record against the freshly derived mapping. Your requested failure fixture is implemented and verified: corrupting one mapping entry makes the derivation exit 1 and fails test [37]. Note 23_q0_state_metrics.py still skips unequal-length cosines by design \u2014 it is a single-run metrics tool with no cross-cell mapping; the mapping-aware path is derive_q3.py.",
+      "finding_id": "F-006",
+      "fix_commit": "b7de47840a74d0e6fc5321912e54f4d05fbab7f1"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Correct on both counts. Q0_RESOLVED.md and P1_REFERENCE_AUDIT.md now carry the Q3 PROVENANCE STATUS marker. The structural point matters more: test [37] no longer enumerates a hand-maintained subset \u2014 it parses RESULTS_INDEX.md, extracts every index block carrying an UNVERIFIED/NOT CITABLE demotion, discovers the .md authorities named inside those blocks, and requires each to carry the demotion or an explicit HISTORICAL/SUPERSEDED marker. This is your proposed C-SWEEP-004. Verified by fixture: stripping the banner from Q0_RESOLVED.md fails the sweep, naming that file. A future authority added to an index row is covered automatically.",
+      "finding_id": "F-008",
+      "fix_commit": "b7de47840a74d0e6fc5321912e54f4d05fbab7f1"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Correct \u2014 the sentence was stale, recording a cancelled earlier attempt, and it contradicted the gate, the index and the raw output. Q0_POLARON_EXCLUDED.md now strikes it through and supersedes it in place, quoting QE's own convergence block (energy error 9.8E-05 Ry vs criterion 1.0E-04; gradient error 1.6E-03 Ry/bohr vs 1.945E-03; bfgs converged in 11 scf cycles and 10 bfgs steps) from q0/q0_final_ns1.out.gz, and states that both q=0 endpoints are formally converged. Test [37] scans every index-discovered authority plus the index, gate and audit record, and rejects any unmarked instance of that claim \u2014 your proposed C-STATE-002.",
+      "finding_id": "F-011",
+      "fix_commit": "b7de47840a74d0e6fc5321912e54f4d05fbab7f1"
+    }
+  ],
+  "report_sha256": "e231b3384bcdd285c0a81d471a7090f1143100e6c690ae666dad01149785a5e4",
+  "report_sha256_confirmed": true
+}

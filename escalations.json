@@ -1,0 +1,28 @@
+{
+  "escalations": [
+    {
+      "escalation_id": "ESC-0001",
+      "finding_id": "F-005",
+      "reason": "unresolved across 3 audit cycles",
+      "cycle_ids": [
+        "CYCLE-000001",
+        "CYCLE-000002",
+        "CYCLE-000004"
+      ],
+      "opened_at": "2026-07-31T04:04:08.683851+00:00",
+      "status": "OPEN"
+    },
+    {
+      "escalation_id": "ESC-0002",
+      "finding_id": "F-006",
+      "reason": "unresolved across 3 audit cycles",
+      "cycle_ids": [
+        "CYCLE-000001",
+        "CYCLE-000002",
+        "CYCLE-000004"
+      ],
+      "opened_at": "2026-07-31T04:04:08.755017+00:00",
+      "status": "OPEN"
+    }
+  ]
+}
