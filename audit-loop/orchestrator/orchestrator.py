@@ -847,8 +847,11 @@ class Orchestrator:
   **可复现命令必须可移植:审计工件会公开发布。禁止出现本机绝对路径、worktree 路径、
   $TMPDIR 或用户名;一律假定读者已 clone 该仓库并 checkout 被审计 commit,使用仓库相对路径。**
   (宪法的反同源偏差棘轮:让该类缺陷下轮变成机器可查)。
-  对 cycle_context.json 中带 fix_commit 且 fix_commit == "{sha}" 的既往 finding:独立验证修复后
-  才可写入 verified_closed_findings(finding_id + 非空 verification_summary);验证不了就保持沉默。
+  **既往仍未关闭的 finding 必须逐条表态,不得沉默略过**:每一条都要么出现在 findings(仍开)、
+  要么出现在 verified_closed_findings(已独立验证修复)。沉默不等于已修复——一条被略过的
+  finding 会无限期阻断下去。cycle_context.json 的 previous_cycles 列出了它们。
+  写入 verified_closed_findings 需 finding_id + 非空 verification_summary;验证不了就列为仍开
+  并说明为何无法验证。
 - out/codex_run_metadata.json — 符合 schema;cycle_id/audited_commit 同上;runner 写 "codex-cli";
   model 写你实际使用的模型标识;started_at/completed_at 为真实 ISO-8601 UTC 时间。
   **prompt_sha256 必填**:本提示词文件 ./prompt_attempt<N>.txt 的 SHA-256(命令见下),
@@ -986,6 +989,7 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
         errors.extend(self._enforce_policy_bundle(cycle_id, metadata))
         errors.extend(self._enforce_coverage(cycle_id, result))
         errors.extend(self._enforce_prompt_binding(cycle_id, metadata))
+        errors.extend(self._enforce_open_finding_accounting(cycle_id, result))
         for name, entry in (manifest.get("files") or {}).items():
             path = out_dir / name
             if not path.exists():
@@ -1116,6 +1120,37 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
                 f"({', '.join(hard_failures)}); a machine-proven defect blocks")
         return errors
 
+    def _enforce_open_finding_accounting(self, cycle_id: str,
+                                         result: dict[str, Any]) -> list[str]:
+        """Every still-open finding must be spoken to, not passed over in silence.
+
+        A finding stays open until an auditor says otherwise, so an audit that
+        simply omits it leaves it blocking forever. That happened: F-005 and F-009
+        had their re-audit cycle voided, and seven later audits never named them
+        again, so a fix that Tier-0 shows was made could never be recorded.
+        """
+        state = self.controller_state()
+        opened: dict[str, str] = {}
+        for event in state.get("event_log", []):
+            if event["event"] == "FINDING_OPENED":
+                opened[event["finding_id"]] = event.get("cycle_id") or ""
+            elif event["event"] == "FINDING_VERIFIED_CLOSED":
+                opened.pop(event["finding_id"], None)
+        if not opened:
+            return []
+        spoken = {f.get("finding_id") for f in result.get("findings", [])}
+        spoken |= {c.get("finding_id")
+                   for c in result.get("verified_closed_findings", [])}
+        for item in result.get("findings", []):
+            for note in item.get("evidence", []):
+                spoken |= set(re.findall(r"\bF-[A-Za-z0-9._-]+\b", str(note)))
+        unaccounted = sorted(set(opened) - spoken)
+        if not unaccounted:
+            return []
+        return [f"findings still open from earlier cycles are not accounted for: "
+                f"{', '.join(unaccounted)} — each must appear in findings (still open) "
+                f"or verified_closed_findings (fixed), never omitted"]
+
     def _enforce_policy_bundle(self, cycle_id: str, metadata: dict[str, Any]) -> list[str]:
         """The receipt must name the exact policy it was produced under."""
         expected_path = self.cycles_dir / cycle_id / "policy_bundle.json"
@@ -1241,6 +1276,22 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
             raise RuntimeError(f"cycle {cycle_id} missing from controller state after FINAL")
         result = cycle.get("audit_result") or {}
         cycle_dir = self.cycles_dir / cycle_id
+        if not result.get("findings"):
+            # Nothing was raised, so there is nothing to answer. Queuing a review
+            # here asks for a disposition that has no valid shape: the schema needs
+            # at least one finding and the controller rejects any id the cycle did
+            # not raise, so the executor can only comply by inventing a judgement it
+            # never made. Any verified closures in this cycle were already recorded
+            # by the controller and need no disposition.
+            closed = [c.get("finding_id") for c in result.get("verified_closed_findings", [])]
+            self._write_status_page()
+            self._publish_ledger()
+            log(f"{cycle_id} {result.get('decision')} with no findings; no disposition is "
+                f"owed{' (closed: ' + ', '.join(closed) + ')' if closed else ''}")
+            self.notify("Audit Loop: clean audit",
+                        f"{cycle_id} {result.get('decision')} — nothing raised, nothing to "
+                        f"answer{'; closed ' + ', '.join(closed) if closed else ''}")
+            return
         pending = {
             "cycle_id": cycle_id,
             "audit_report_id": cycle.get("audit_report_id"),

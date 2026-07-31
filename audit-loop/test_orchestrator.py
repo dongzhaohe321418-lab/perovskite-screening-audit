@@ -166,3 +166,45 @@ def test_doctor_never_reports_idle_while_a_blocker_denies_actions(tmp_path, caps
     assert "ACTIVE BLOCKERS" in out
     assert "F-001" in out
     assert "DISAGREE_WITH_EVIDENCE" in out
+
+
+def test_a_clean_audit_owes_no_disposition(tmp_path, capsys):
+    """A PASS with no findings must not be queued for an answer.
+
+    The disposition schema needs at least one finding and the controller rejects
+    any id the cycle did not raise, so a zero-finding review can only be answered
+    by inventing a judgement that was never made. This deadlocked a real cycle.
+    """
+    cycles = {"CYCLE-000008": {
+        "cycle_id": "CYCLE-000008", "project_id": "p", "science_commit": "a" * 40,
+        "status": "FINAL", "disposition_status": "TASK_CREATED",
+        "audit_report_id": "CYCLE-000008:abc", "audit_report_sha256": "b" * 64,
+        "audit_result": {"decision": "PASS", "findings": [],
+                         "verified_closed_findings": [{"finding_id": "F-015",
+                                                       "verification_summary": "ok"}]},
+    }}
+    orch = make(tmp_path, cycles)
+    (orch.cycles_dir / "CYCLE-000008" / "out").mkdir(parents=True)
+
+    orch._emit_pending_review("CYCLE-000008")
+
+    assert not list(orch.pending_dir.glob("CYCLE-*.json")), "clean audit was queued"
+    assert orch._awaiting_disposition() is None
+    assert "no disposition is owed" in capsys.readouterr().out
+
+
+def test_a_cycle_with_findings_is_still_queued(tmp_path):
+    cycles = {"CYCLE-000009": {
+        "cycle_id": "CYCLE-000009", "project_id": "p", "science_commit": "c" * 40,
+        "status": "FINAL", "disposition_status": "TASK_CREATED",
+        "audit_report_id": "CYCLE-000009:def", "audit_report_sha256": "d" * 64,
+        "audit_result": {"decision": "BLOCK", "findings": [
+            {"finding_id": "F-020", "severity": "HIGH", "title": "x", "status": "OPEN",
+             "blocked_scopes": ["publish_claim"]}]},
+    }}
+    orch = make(tmp_path, cycles)
+    (orch.cycles_dir / "CYCLE-000009" / "out").mkdir(parents=True)
+
+    orch._emit_pending_review("CYCLE-000009")
+
+    assert (orch.pending_dir / "CYCLE-000009.json").exists()
