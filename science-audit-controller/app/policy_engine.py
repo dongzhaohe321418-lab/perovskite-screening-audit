@@ -16,6 +16,16 @@ HIGH_RISK_ACTIONS = {
     "increase_budget",
     "operate_instrument",
 }
+# Halting work and preserving its evidence runs the opposite way to starting it:
+# it spends nothing, destroys nothing, and is what the constitution's stop-loss
+# (§13.3) exists to trigger. Gating it behind an unrelated open finding would mean
+# a runaway job cannot be stopped because a document is inconsistent — the audit
+# would be burning the allocation it exists to protect. These stay high-risk for
+# the audit trail and are still logged, but neither an active blocker nor a
+# non-permissive audit decision may withhold them.
+SAFE_DIRECTION_ACTIONS = {
+    "stop_production_job",
+}
 PERMISSIVE_AUDIT_DECISIONS = {"PASS", "PASS_WITH_CAVEATS"}
 ALLOWED_ACTORS = {"claude_science"}
 # Landing a fix in the Science Repo is the remediation the constitution prescribes
@@ -61,6 +71,9 @@ class PolicyEngine:
             if request.action in LOW_RISK_ACTIONS:
                 return ActionCheckResponse(decision="ALLOW", reason_codes=[])
             return ActionCheckResponse(decision="DENY", reason_codes=["UNKNOWN_ACTION"])
+
+        if request.action in SAFE_DIRECTION_ACTIONS:
+            return ActionCheckResponse(decision="ALLOW", reason_codes=["SAFE_DIRECTION"])
 
         reasons: list[str] = []
         matching_blockers = [

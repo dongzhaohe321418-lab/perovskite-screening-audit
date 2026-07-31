@@ -184,3 +184,20 @@ def test_landing_a_fix_is_permitted_even_while_blockers_are_active(tmp_path):
 
     assert policy.check(action_request(action="submit_production_job")).decision == "DENY"
     assert policy.check(action_request(action="rm_rf_everything")).decision == "DENY"
+
+
+def test_halting_work_is_never_withheld_by_an_open_finding(tmp_path):
+    """A runaway job must be stoppable while a document finding is open.
+
+    Stopping spends nothing and destroys nothing; gating it behind an unrelated
+    blocker would have the audit burning the allocation it exists to protect.
+    """
+    storage, _, _ = final_blocked_cycle(tmp_path)
+    policy = PolicyEngine(storage)
+
+    response = policy.check(action_request(action="stop_production_job"))
+
+    assert response.decision == "ALLOW"
+    assert response.reason_codes == ["SAFE_DIRECTION"]
+    # Starting new work under the same blockers stays denied.
+    assert policy.check(action_request(action="submit_production_job")).decision == "DENY"
