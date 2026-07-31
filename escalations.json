@@ -29,6 +29,21 @@
       "reason": "unresolved across 3 audit cycles",
       "resolution_note": "F-006 (Q3 provenance): each cycle raised a genuinely different gap, so the finding legitimately spans three cycles. CYCLE-000002 asked for raw records \u2014 committed at ddaca3f with cluster-side SHA-256 custody and a derivation script. CYCLE-000004 then correctly found that script did not cover the P1/P2 cosine and alignment values \u2014 fixed at b7de4784 with a committed shared-atom mapping (159 pairs, one unmatched vacancy-filling atom) and a derivation that rebuilds it from raw and asserts cosine 0.9757, its controls, the IPRs and both alignment references, with a verified corruption fixture. Q3 remains NOT CITABLE pending independent re-verification. No PI decision required.",
       "status": "ACKNOWLEDGED"
+    },
+    {
+      "escalation_id": "ESC-0003",
+      "finding_id": "F-009",
+      "reason": "unresolved across 3 audit cycles",
+      "cycle_ids": [
+        "CYCLE-000002",
+        "CYCLE-000004",
+        "CYCLE-000005"
+      ],
+      "opened_at": "2026-07-31T05:05:45.750345+00:00",
+      "status": "ACKNOWLEDGED",
+      "acknowledged_at": "2026-07-31T05:14:17.551796+00:00",
+      "acknowledged_by": "principal-investigator",
+      "resolution_note": "PI acknowledged 2026-07-31. F-009 (Tier-0 test entrypoint) was addressed in the fix commits audited by CYCLE-000004/000005; the auditor did not restate it, so it never received an explicit closure. Released to let the loop continue; if it is genuinely unresolved a later audit will raise it again."
     }
   ]
 }
