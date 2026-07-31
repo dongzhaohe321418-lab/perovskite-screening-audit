@@ -1,0 +1,78 @@
+{
+  "cycle_id": "CYCLE-000004",
+  "audited_commit": "746564b69191a91a41536bf0d9aa870220cda408",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-006",
+      "title": "Q3 still lacks the committed transformations needed to recompute every reported authority value",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "submit_production_job",
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 2 / R-EVD-006",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:48-57 names Q0_RESOLVED.md and P1_REFERENCE_AUDIT.md as Q3 authorities and conditions citability on a clean recomputation. Those documents report a 159-shared-atom cosine of 0.9757/0.976 and 50-80 meV alignment values.",
+        "derive_q3.py:29-72 only validates P1 convergence, P2 moment/energy, ELAS/POL energy-derived quantities, and existence/size of the two projwfc files; it does not parse per-atom weights, construct the 160-to-159 shared-atom mapping, calculate the cosine, or calculate the alignment values.",
+        "scripts/23_q0_state_metrics.py:104-116 explicitly skips cosine computation when the reference and target vectors have different lengths; committed P1 and P2 raw outputs report 160 and 159 atoms respectively. No tracked mapping or derived P1/P2 shared-atom weight record is present.",
+        "reproduce: python3 results/objective1/dft/charge_relaxed/q3_raw/derive_q3.py && nl -ba scripts/23_q0_state_metrics.py | sed -n '104,117p' && git ls-files | rg -i 'weight.*(p1|p2)|p1.*weight|mapping|map.*(p1|p2)|shared.*atom' || true",
+        "proposed_check: C-Q3-RECOMP-002 — require the Q3 derivation to recompute every published P1/P2 cosine and alignment value from committed raw outputs plus an explicit committed 160-to-159 mapping and derived weight records; a fixture deleting or altering the mapping must fail."
+      ]
+    },
+    {
+      "finding_id": "F-008",
+      "title": "Q3 NOT CITABLE demotion is still absent from index-named authority documents",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "submit_production_job",
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-COR-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:36-57 marks Q3 UNVERIFIED / NOT CITABLE and names Q0_POLARON_EXCLUDED.md, Q0_RESOLVED.md, and P1_REFERENCE_AUDIT.md as its authority documents.",
+        "Q0_RESOLVED.md:1-15 and P1_REFERENCE_AUDIT.md:72-91 retain live CBM-like/shallow-donor assertions but contain neither Q3 PROVENANCE STATUS nor UNVERIFIED/NOT CITABLE nor F-006. Therefore the canonical demotion has not reached every authority it itself names.",
+        "scripts/20_test_checks.py:987-1003 implements the correction sweep over only Q0_POLARON_EXCLUDED.md, Q0_NEB_GATE.md, and EXPERIMENT_AUDIT.md; it omits both unmarked authorities named at RESULTS_INDEX.md:48-50, so its green result cannot demonstrate repo-wide propagation.",
+        "reproduce: for f in results/objective1/dft/charge_relaxed/Q0_RESOLVED.md results/objective1/dft/charge_relaxed/P1_REFERENCE_AUDIT.md; do if rg -n 'Q3 PROVENANCE STATUS|UNVERIFIED / NOT CITABLE|F-006' \"$f\"; then :; else echo \"missing Q3 demotion marker: $f\"; fi; done; rg -n 'Authoritative documents|Q0_RESOLVED|P1_REFERENCE_AUDIT|CBM-like|shallow-donor' RESULTS_INDEX.md results/objective1/dft/charge_relaxed/Q0_RESOLVED.md results/objective1/dft/charge_relaxed/P1_REFERENCE_AUDIT.md; nl -ba scripts/20_test_checks.py | sed -n '987,1003p'",
+        "proposed_check: C-SWEEP-004 — parse every authority path named by a canonical index row carrying UNVERIFIED/NOT CITABLE, require each reachable authority to carry that status or an explicit HISTORICAL/SUPERSEDED marker, and fail a fixture with the present unmarked Q0_RESOLVED.md and P1_REFERENCE_AUDIT.md."
+      ]
+    },
+    {
+      "finding_id": "F-011",
+      "title": "Current authority documents disagree on whether q0_final formally converged",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "submit_production_job",
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "Q0_POLARON_EXCLUDED.md:131-132 states, without an historical or superseded marker, that q0_final plateaued without converging and that only the initial endpoint is relaxed.",
+        "Q0_NEB_GATE.md:8 and :22-27 assert the opposite current status: both endpoints PASS and q0_final formally CONVERGED. RESULTS_INDEX.md:23-32 likewise says both q0 endpoints formally converged.",
+        "The current raw QE output q0/q0_final_ns1.out.gz contains the formal final convergence block: Energy error 9.8E-05 Ry, Gradient error 1.6E-03 Ry/Bohr, and bfgs converged in 11 scf cycles and 10 bfgs steps.",
+        "reproduce: rg -n 'q0_final.*plateaued without converging|both q=0 endpoints genuinely ionically converged|q0_final: CONVERGED|both endpoints formally converged' results/objective1/dft/charge_relaxed/Q0_POLARON_EXCLUDED.md results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md RESULTS_INDEX.md; gzip -cd results/objective1/dft/charge_relaxed/q0/q0_final_ns1.out.gz | rg 'Energy error|Gradient error|bfgs converged' | tail -3",
+        "proposed_check: C-STATE-002 — scan every current Objective 1 authority document for q0_final convergence predicates, require a single normalized state, and fail a fixture containing the unmarked plateau sentence alongside the formal QE convergence block."
+      ]
+    }
+  ],
+  "summary": "BLOCK: Q3 still lacks reproducible transformations for all authority values, its NOT CITABLE correction is not propagated to every named authority, and q0_final has incompatible current convergence states.",
+  "coverage": {
+    "evidence_manifest_sha256": "c546b4176ddf115ec90f5daf88ee8cece8a91e15d504d3b16b08307d402c5db4",
+    "paths_examined": 112,
+    "method": "Enumerated all 463 tracked paths; semantically scanned all current Markdown authority/status documents and inspected the changed paths, then read and independently recomputed the Objective 1 Q3/q0 and Objective 2 primary raw/manifests/scripts in an isolated clone.",
+    "not_examined": [
+      "Binary figure pixels and PDFs were inventoried but not visually rendered.",
+      "No external cluster, instrument, or remote filesystem state was available or consulted.",
+      "Historical archive documents were sampled for supersession markers rather than re-audited as current conclusions."
+    ]
+  }
+}
