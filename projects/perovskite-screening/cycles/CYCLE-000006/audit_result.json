@@ -1,0 +1,45 @@
+{
+  "cycle_id": "CYCLE-000006",
+  "audited_commit": "4aed10a97d4858ef7b18dea940e6bf66294e2849",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-014",
+      "title": "Current XRD README retains an unmarked superseded DOC range",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 2 / R-EVD-003",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "xrd/README.md:102 states an absolute DOC range of 46–60%, while :31 and :297 state 49–65%; :366–367 records that the current background-model correction shifted 46–60% to 49–65%, but :102 is unmarked.",
+        "xrd/results/summary_metrics.csv records Degree of crystallinity as 49.03075193872934–65.21878625874905%. An isolated recomputation from the committed raw scan and .mdi sidecar with xrd_protocol_kernel.analyse_single returned 49.030543–65.218597%.",
+        "reproduce: python3 -c 'import sys; sys.path.insert(0,\"xrd/analysis\"); import xrd_protocol_kernel as k; txt=\"xrd/data/raw/generations-0726/perovskite_control__20260726-095651_100.txt\"; h=k.read_mdi_header(txt[:-4]+\".mdi\"); m=k.scan_meta(wavelength=h[\"wavelength\"],step=h[\"step\"],dwell=h[\"dwell\"],tth_range=(h[\"start\"],h[\"end\"]),instrument=h[\"instrument\"],label=\"control\"); r=k.analyse_single(txt,meta=m,nmc=20,n_boot=250,calibrate=True,substrate_tth=[30.05]); print(\"DOC=%.6f–%.6f%%\" % r[\"crystallinity\"][\"doc_range\"])'; sed -n '97,116p;294,299p;360,368p' xrd/README.md",
+        "proposed_check: C-XRD-DOC-001 — recompute the control DOC range from the committed raw .txt/.mdi with xrd_protocol_kernel, then require every unmarked DOC range in xrd/README.md to agree after documented rounding; a fixture retaining unmarked 46–60% when the derivation yields 49–65% must fail."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-012",
+      "verification_summary": "In an isolated clean clone, derive_q3.py and an independent raw-output parser both produced VBM-referenced +75.8 meV, semicore-aligned +52.1 meV, and semicore shift -45.0 meV; P1_REFERENCE_AUDIT.md and Q0_RESOLVED.md carry the normalized values. A deliberate unmarked +75.9 table mutation made regression group 39 fail."
+    },
+    {
+      "finding_id": "F-013",
+      "verification_summary": "The Q3 index row now declares committed/recomputable q3_raw evidence and retains the prior absent-raw assertion only in an explicit retraction. A repository-wide live-document sweep found no other unmarked legacy absent-raw assertion, and regression group 39 passed at the fixed commit."
+    }
+  ],
+  "summary": "BLOCK for publication claims because a current XRD authority document contains an unmarked DOC value contradicted by its raw-data recomputation. F-012 and F-013 are independently verified closed.",
+  "coverage": {
+    "evidence_manifest_sha256": "c546b4176ddf115ec90f5daf88ee8cece8a91e15d504d3b16b08307d402c5db4",
+    "paths_examined": 464,
+    "method": "Enumerated all tracked paths at the fixed commit, then content-audited current indices, authority reports, protocols, manifests, Q3/XRD raw data and derivations, plus isolated clean-clone executions and targeted repository-wide sweeps.",
+    "not_examined": [
+      "No line-by-line semantic review of every historical archive, literature PDF, proposal PDF, or image binary was performed.",
+      "No full independent re-execution of every MLIP/DFT production workflow or every XRD passivator-series analysis was performed; high-impact Q3, Objective 2, and control-XRD claims were targeted."
+    ]
+  }
+}
