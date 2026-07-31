@@ -1,0 +1,21 @@
+{
+  "cycle_id": "CYCLE-000008",
+  "audited_commit": "af0dc58713b9bcf675fb324a262024f39127f8a7",
+  "decision": "PASS",
+  "findings": [],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-015",
+      "verification_summary": "At fix commit af0dc58713b9bcf675fb324a262024f39127f8a7, AUDIT_CORRECTIONS_CYCLE1.md explicitly labels the 36-group record HISTORICAL and superseded; README.md, results/objective2/CURRENT_STATUS.md, and EXPERIMENT_AUDIT.md each declare 41 groups; scripts/20_test_checks.py contains 41 numbered groups and exits 0 in an isolated copy, including regression [41] for F-015."
+    }
+  ],
+  "summary": "Focused re-audit verifies F-015 closed; no open findings are emitted for this fixed snapshot.",
+  "coverage": {
+    "evidence_manifest_sha256": "c546b4176ddf115ec90f5daf88ee8cece8a91e15d504d3b16b08307d402c5db4",
+    "paths_examined": 5,
+    "method": "Selected and read every path changed by the submitted F-015 fix commit: its correction record, the three live suite-count declarations, and the regression script; executed the script in an isolated copied worktree.",
+    "not_examined": [
+      "No manual full-tree re-review beyond the Tier-0 receipt and the five paths changed by the F-015 fix; this retry is limited to verifying that prior finding's closure."
+    ]
+  }
+}
