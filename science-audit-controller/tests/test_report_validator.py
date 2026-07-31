@@ -268,7 +268,8 @@ def test_audit_cannot_close_finding_without_matching_fix_commit(tmp_path):
     result = validator.validate_audit_push("perovskite-screening", before, after)
 
     assert not result.valid
-    assert any("matching submitted fix" in error for error in result.errors)
+    # No fix was ever submitted for F-001, so there is nothing a closure could rest on.
+    assert any("no submitted fix commit" in error for error in result.errors)
     assert "F-001" in reduce_blockers(storage.event_log(), first_cycle.project_id).active
 
 
@@ -404,3 +405,81 @@ def test_quarantined_finding_id_cannot_be_reopened_by_a_later_audit(tmp_path):
 
     assert not result.valid
     assert "closed finding ID cannot be reused: F-001" in result.errors
+
+
+def test_a_fix_carried_by_an_ancestor_commit_can_still_be_closed(tmp_path):
+    """Closure must not require the audit to land on the fix commit exactly.
+
+    F-005 and F-009 had their re-audit cycle voided, so under the old rule no later
+    audit could ever close them however thoroughly it verified the repair — the fix
+    was in the tree, but the bookkeeping pointed at a cycle that no longer counted.
+    """
+    storage, fake, first_cycle = final_blocked_cycle(tmp_path)
+    fix_commit = "8" * 40
+    later_commit = "9" * 40
+    fake.existing_commits.update({fix_commit, later_commit})
+    for sha in (fix_commit, later_commit):
+        fake.files[("science", sha, ".audit/audit_request.json")] = json.dumps(
+            valid_audit_request()
+        )
+
+    validator = ClaudeDispositionValidator(storage, fake, ROOT / "schemas")
+    assert validator.validate(
+        disposition_for(first_cycle, [
+            {"finding_id": "F-001", "disposition": "ACCEPT_AND_FIX", "fix_commit": fix_commit},
+            {"finding_id": "F-002", "disposition": "PASS_NO_ACTION"},
+        ])
+    ).valid
+
+    # The audit lands on a descendant of the fix, not on the fix itself.
+    codex = CodexAdapter(storage, ROOT / "prompts")
+    manager = CycleManager(storage, fake, codex, ROOT / "schemas")
+    later = manager.handle_science_push(
+        first_cycle.project_id, first_cycle.science_repo, later_commit
+    )
+    report_validator = ReportValidator(storage, fake, ClaudeAdapter(storage, ROOT / "prompts"),
+                                       ROOT / "schemas")
+    paths = audit_artifacts(fake, "5" * 40, later, "PASS", [],
+                            verified_closed_findings=[
+                                {"finding_id": "F-001", "verification_summary": "verified"}])
+    fake.set_diff("audit", "3" * 40, "5" * 40, paths)
+
+    result = report_validator.validate_audit_push(later.project_id, "3" * 40, "5" * 40)
+
+    assert result.valid, result.errors
+    assert "F-001" not in reduce_blockers(storage.event_log(), later.project_id).findings
+
+
+def test_a_closure_whose_fix_is_not_in_the_audited_tree_is_refused(tmp_path):
+    storage, fake, first_cycle = final_blocked_cycle(tmp_path)
+    fix_commit = "8" * 40
+    unrelated = "a" * 40
+    fake.existing_commits.update({fix_commit, unrelated})
+    for sha in (fix_commit, unrelated):
+        fake.files[("science", sha, ".audit/audit_request.json")] = json.dumps(
+            valid_audit_request()
+        )
+    validator = ClaudeDispositionValidator(storage, fake, ROOT / "schemas")
+    assert validator.validate(
+        disposition_for(first_cycle, [
+            {"finding_id": "F-001", "disposition": "ACCEPT_AND_FIX", "fix_commit": fix_commit},
+            {"finding_id": "F-002", "disposition": "PASS_NO_ACTION"},
+        ])
+    ).valid
+
+    codex = CodexAdapter(storage, ROOT / "prompts")
+    later = CycleManager(storage, fake, codex, ROOT / "schemas").handle_science_push(
+        first_cycle.project_id, first_cycle.science_repo, unrelated
+    )
+    fake.ancestor_results[("science", fix_commit, unrelated)] = False
+    report_validator = ReportValidator(storage, fake, ClaudeAdapter(storage, ROOT / "prompts"),
+                                       ROOT / "schemas")
+    paths = audit_artifacts(fake, "5" * 40, later, "PASS", [],
+                            verified_closed_findings=[
+                                {"finding_id": "F-001", "verification_summary": "claimed"}])
+    fake.set_diff("audit", "3" * 40, "5" * 40, paths)
+
+    result = report_validator.validate_audit_push(later.project_id, "3" * 40, "5" * 40)
+
+    assert not result.valid
+    assert any("not contained in the audited tree" in e for e in result.errors)

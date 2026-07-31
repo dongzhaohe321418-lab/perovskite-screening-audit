@@ -406,10 +406,23 @@ class ReportValidator:
             if finding_id not in state.findings:
                 errors.append(f"cannot close unknown or inactive finding: {finding_id}")
                 continue
-            if state.fix_commits.get(finding_id) != cycle.science_commit:
-                errors.append(f"verified closure lacks matching submitted fix commit: {finding_id}")
-            if state.reaudit_cycles.get(finding_id) != cycle.cycle_id:
-                errors.append(f"verified closure was not audited in this cycle: {finding_id}")
+            fix_commit = state.fix_commits.get(finding_id)
+            if not fix_commit:
+                errors.append(f"verified closure has no submitted fix commit: {finding_id}")
+                continue
+            # The property that matters is that the auditor examined a tree which
+            # actually contains the fix — not that the audit landed on the fix commit
+            # exactly. Demanding exact equality meant a finding whose re-audit cycle
+            # was voided, or whose fix was overtaken by later commits before the audit
+            # ran, could never be closed by any subsequent cycle however thoroughly it
+            # was verified.
+            if fix_commit != cycle.science_commit and not self.github.is_ancestor(
+                "science", fix_commit, cycle.science_commit
+            ):
+                errors.append(
+                    f"verified closure names fix commit {fix_commit[:12]} which is not "
+                    f"contained in the audited tree {cycle.science_commit[:12]}: {finding_id}"
+                )
         return errors
 
     @staticmethod

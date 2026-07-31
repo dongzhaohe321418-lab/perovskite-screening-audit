@@ -139,6 +139,7 @@ def build_index(state: dict[str, Any], costs: dict[str, dict[str, Any]]) -> str:
         "- `dispositions/CYCLE-*.json` — the executor's answer, verbatim as the controller accepted it",
         "- `action_ledger.jsonl` — every admission-gate consultation and its decision",
         "- `escalations.json` — findings escalated to the principal",
+        "- `INCIDENTS.md` — defects in the supervision system itself, both sides",
         "",
     ]
     return "\n".join(lines)
@@ -189,6 +190,13 @@ def main() -> int:
         src = state_dir / name
         if src.exists():
             (work / name).write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+    # The supervision system's own defects belong in the published record too: a
+    # ledger that showed only the audited party's failures would be the less
+    # honest document.
+    incidents = Path(cfg["paths"]["audit_loop_root"]) / "INCIDENTS.md"
+    if incidents.exists():
+        (work / "INCIDENTS.md").write_text(incidents.read_text(encoding="utf-8"),
+                                           encoding="utf-8")
 
     sh(["git", "add", "-A"], cwd=work)
     if not sh(["git", "status", "--porcelain"], cwd=work):

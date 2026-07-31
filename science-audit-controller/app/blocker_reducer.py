@@ -65,11 +65,15 @@ def reduce_blockers(
             if finding_id not in state.findings:
                 _error(state, event, f"close without open finding for {finding_id}")
                 continue
-            if state.reaudit_cycles.get(finding_id) != event.cycle_id:
-                _error(state, event, f"close lacks matching re-audit for {finding_id}")
-                continue
-            if state.fix_commits.get(finding_id) != event.data.get("verified_commit"):
-                _error(state, event, f"close commit does not match submitted fix for {finding_id}")
+            # A closure still requires that a fix was actually submitted — that much
+            # is decidable from the event log alone. Whether the audited tree
+            # contained that fix is an ancestry question needing git, so the
+            # validator owns it and refuses the closure before this event is ever
+            # minted. Re-asserting exact commit and cycle equality here was not
+            # defence in depth: it permanently trapped findings whose re-audit
+            # cycle was voided, or whose fix was overtaken by later commits.
+            if not state.fix_commits.get(finding_id):
+                _error(state, event, f"close without a submitted fix for {finding_id}")
                 continue
             state.findings.pop(finding_id)
             state.active.pop(finding_id, None)
