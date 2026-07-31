@@ -7,13 +7,14 @@ what the gate permitted, and what each cycle cost. Generated; do not edit.
 | cycle | audited commit | decision | findings | disposition | closed here |
 |---|---|---|---|---|---|
 | [CYCLE-000001](cycles/CYCLE-000001.md) | `81fd505e71b8` | BLOCK | 7 | RECORDED | 0 |
-| [CYCLE-000002](cycles/CYCLE-000002.md) | `bfece650948a` | BLOCK | 4 | TASK_CREATED | 5 |
+| [CYCLE-000002](cycles/CYCLE-000002.md) | `bfece650948a` | BLOCK | 4 | RECORDED | 5 |
+| [CYCLE-000003](cycles/CYCLE-000003.md) | `ddaca3fc36e3` | AUDIT_OUTPUT_INVALID | 0 | NOT_STARTED | 0 |
 
 ## Totals
 
 - cycles finalized: 2
 - findings verified closed: 5
-- audit input tokens: 6,683,031
+- audit input tokens: 9,056,536
 
 ## Files
 

@@ -1,0 +1,32 @@
+{
+  "audit_report_id": "CYCLE-000002:e8184dbfb755",
+  "cycle_id": "CYCLE-000002",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "All 151 unresolved repository-path-shaped references fixed at ddaca3fc36e392fa89d26225d09002d38426f35d: 112 repointed to their unique tracked full paths (longest-match, unique-basename), archive moves repointed to archive/ locations (e.g. HANDOFF.md -> archive/HANDOFF_2026-07-23.md, EXECUTION_GUIDE.md -> archive/EXECUTION_GUIDE_stage2.md), and genuinely remote or never-committed names annotated with a parenthetical (space-containing, so C-LINK-001's own tokenizer no longer parses them as tree paths) stating why they are not in-tree. Reimplemented the C-LINK-001 resolver (same regexes, extensions, doc-relative + root-relative candidates) against the fixed tree: 0 violations.",
+      "finding_id": "F-005",
+      "fix_commit": "ddaca3fc36e392fa89d26225d09002d38426f35d"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Q3 raw provenance committed at results/objective1/dft/charge_relaxed/q3_raw/: P1.out, P2.in/out, proj_P1/proj_P2 in+out, ELAS.in/out, POL.in/out, per-job cmd.sh and slurm logs (gzipped), harvested from cluster jobs dd88d5d3/464c52ff/652b5174. Chain of custody: REMOTE_SHA256_UNCOMPRESSED.txt written on the cluster beside the source job dirs; every gunzipped file re-verified against it after transfer (6/6 match). INPUT_MANIFEST.json records per-file sha256+bytes. derive_q3.py is an executable stdlib-only derivation that re-verifies custody then recomputes and asserts every quoted Q3 value: P2 converges in 6 iterations to m=0 at E=-9247.62643349 Ry; ELAS elastic cost 112.6 meV; POL moment decays 1.76->0.65 muB with last E 109.8 meV above delocalised and fixed-geometry spin gain <=2.8 meV; POL explicitly flagged NOT converged (bounds, not point values). Exit 0 at ddaca3fc36e392fa89d26225d09002d38426f35d. Gate condition 3 now cites this committed evidence. Q3 remains marked NOT CITABLE in RESULTS_INDEX.md pending your independent re-verification \u2014 the demotion is yours to lift, not ours.",
+      "finding_id": "F-006",
+      "fix_commit": "ddaca3fc36e392fa89d26225d09002d38426f35d"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Demotion propagated to every authority document: Q0_POLARON_EXCLUDED.md opens with a Q3 PROVENANCE STATUS banner; Q0_NEB_GATE.md condition-3 row and body section state the committed raw evidence and that re-verification is pending; EXPERIMENT_AUDIT.md 1.6 heading + status note and 5.3 pointer added; RESULTS_INDEX.md raw-data rows updated (raw COMMITTED, status stays NOT CITABLE until controller re-audit). New regression test [37] implements the proposed C-SWEEP-003 semantics: if RESULTS_INDEX carries an UNVERIFIED/NOT CITABLE demotion, each named authority doc must carry the status marker, and derive_q3.py must exit 0. Suite green at ddaca3fc36e392fa89d26225d09002d38426f35d.",
+      "finding_id": "F-008",
+      "fix_commit": "ddaca3fc36e392fa89d26225d09002d38426f35d"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Tier-0 C-TEST-001 enabled in the audit-loop config (checks.yaml: test_command_enabled: true, test_python -> /Users/ericdong/.claude-science/conda/envs/dft/bin/python3.12, an interpreter verified to import numpy+ase and to run scripts/20_test_checks.py green from the current tree). The config lives in the audit-loop repo, not the science repo, so the science fix_commit ddaca3fc36e392fa89d26225d09002d38426f35d carries the new test [37] while the enablement takes effect on your next cycle's Tier-0 receipt \u2014 which is the deterministic execution record this finding asked for.",
+      "finding_id": "F-009",
+      "fix_commit": "ddaca3fc36e392fa89d26225d09002d38426f35d"
+    }
+  ],
+  "report_sha256": "e8184dbfb7558b8aa31526a50cf2b57bc602a887b11c1b2eb583673334d05921",
+  "report_sha256_confirmed": true
+}
