@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "orchestrator"))
 from orchestrator import Orchestrator  # noqa: E402
 
+IMESSAGE_TO = "dongzhaohe321418@icloud.com"
+
 o = Orchestrator(ROOT / "orchestrator" / "config.yaml")
 state = o.controller_state()
 cycles = state.get("cycles", {})
@@ -73,18 +75,25 @@ if needs_pi:
     subprocess.run(["osascript", "-e",
                     'display notification "{}" with title "Audit Loop: 需要你介入"'.format(
                         needs_pi[0].replace('"', "'")[:170])], check=False)
-    # Outbound SMTP is refused by the recipient's provider from a residential IP, so
-    # the off-machine channel is an HTTPS push to a private topic instead. It carries
-    # no secrets: only what the review already printed.
-    topic_file = ROOT / "state" / "ntfy_topic.txt"
-    if topic_file.exists():
-        topic = topic_file.read_text(encoding="utf-8").strip()
-        subprocess.run(
-            ["curl", "-s", "-m", "20",
-             "-H", "Title: Audit Loop 需要你介入",
-             "-H", "Priority: high",
-             "-H", "Tags: warning",
-             "-d", "\n".join(needs_pi)[:900],
-             f"https://ntfy.sh/{topic}"],
-            capture_output=True, check=False)
+    # Reaching the PI when he is away from this Mac. Outbound SMTP bounces (550 from a
+    # residential IP) and the push service was unreachable, so the channel that works
+    # is the one already syncing: iCloud. A reminder lands on his phone and persists
+    # until dismissed, which suits an alert that must not be missed rather than merely
+    # seen. iMessage is the fallback for immediacy. Both carry only what the review
+    # already printed — no secrets.
+    body = "\n".join(needs_pi)[:900]
+    stamp = dt.datetime.now().strftime("%m-%d %H:%M")
+    subprocess.run([
+        "osascript", "-e",
+        'tell application "Reminders" to make new reminder at end of default list '
+        'with properties {{name:"[audit-loop] 需要你介入 {}", body:"{}", due date:current date}}'
+        .format(stamp, body.replace("\\", "").replace('"', "'").replace("\n", " / "))
+    ], capture_output=True, check=False)
+    subprocess.run([
+        "osascript", "-e",
+        'tell application "Messages" to send "{}" to participant "{}" of '
+        '(1st account whose service type = iMessage)'
+        .format(("[audit-loop] " + body).replace("\\", "").replace('"', "'")
+                .replace("\n", " / ")[:300], IMESSAGE_TO)
+    ], capture_output=True, check=False)
 sys.exit(1 if needs_pi else 0)
