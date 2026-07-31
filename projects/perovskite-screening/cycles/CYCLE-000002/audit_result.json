@@ -1,0 +1,110 @@
+{
+  "cycle_id": "CYCLE-000002",
+  "audited_commit": "bfece650948a2b08c4ed6a818015b1f493561fed",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-005",
+      "title": "Repository-path-shaped links remain unresolved",
+      "severity": "LOW",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-EVD-002",
+        "source: DETERMINISTIC",
+        "finding_class: SOFT",
+        "check_id: C-LINK-001",
+        "Tier-0 resolved 383 repository-path-shaped references in 73 scanned files and found 151 that resolve to neither a root-relative nor document-relative tracked path."
+      ]
+    },
+    {
+      "finding_id": "F-006",
+      "title": "Q3 current result and gate condition lack the committed raw inputs required for recomputation",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "submit_production_job",
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 2 / R-EVD-006",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:36-55 states Q3 is UNVERIFIED/NOT CITABLE because hpc job outputs and P1/P2/ELAS/POL raw discriminator outputs are absent; Q0_POLARON_EXCLUDED.md:1-95 nevertheless presents current numerical polaron/shallow-donor conclusions, and Q0_NEB_GATE.md:10 and :60-66 use P1/P2 and the polaron test as PASS evidence for condition 3.",
+        "The inputs needed to recompute those current claims are not committed at this snapshot, so neither the result nor its gate use can be independently reproduced.",
+        "reproduce: for p in hpc results/objective1/dft/charge_relaxed/P1.out results/objective1/dft/charge_relaxed/P2.out results/objective1/dft/charge_relaxed/ELAS.out results/objective1/dft/charge_relaxed/POL.out; do test -e \"$p\" && printf 'exists %s\\n' \"$p\" || printf 'absent %s\\n' \"$p\"; done",
+        "proposed_check: C-RAWPROV-001 — parse each RESULTS_INDEX current-conclusion row and its declared authority/gate dependencies; require every named raw calculation output, manifest, and derivation script to resolve in-tree, and fail a fixture that labels Q3 non-citable while Q0_NEB_GATE still marks P1/P2/POL evidence PASS."
+      ]
+    },
+    {
+      "finding_id": "F-008",
+      "title": "The F-006 Q3 demotion was not propagated to all current authority documents",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "submit_production_job",
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-COR-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "AUDIT_CORRECTIONS_CYCLE1.md:87-94 records the F-006 correction as a demotion to UNVERIFIED/NOT CITABLE and removal from gate evidence; RESULTS_INDEX.md:36-55 carries that demotion.",
+        "The same retracted Q3 claim remains unmarked as current in Q0_POLARON_EXCLUDED.md:1-10 and :80-95, EXPERIMENT_AUDIT.md:82-143 and :232-238, and Q0_NEB_GATE.md:10 and :60-66. The latter two continue to present it as passed condition-3 evidence.",
+        "reproduce: rg -n 'UNVERIFIED / NOT CITABLE|no thermally significant polaron|V_I⁰ is a shallow donor|P1/P2 show no competing|no competing localised spin state' RESULTS_INDEX.md results/objective1/dft/charge_relaxed/Q0_POLARON_EXCLUDED.md results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md EXPERIMENT_AUDIT.md",
+        "proposed_check: C-SWEEP-003 — when RESULTS_INDEX marks a question UNVERIFIED/NOT CITABLE, scan all declared authority and gate documents for that question; require each live assertion to carry the same demotion or an explicit HISTORICAL/SUPERSEDED marker, and fail a fixture with the present Q3 index/gate mismatch."
+      ]
+    },
+    {
+      "finding_id": "F-009",
+      "title": "Tier-0 did not execute the declared repository test entrypoint",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: §10 / R-GRD-001",
+        "source: DETERMINISTIC",
+        "finding_class: HARD",
+        "check_id: C-TEST-001",
+        "Tier-0 reports SKIP because test_command_enabled is false; therefore its receipt makes no deterministic claim about the test entrypoint.",
+        "Independent audit ran python3 scripts/20_test_checks.py in an isolated clone of the fixed commit; it exited 0 and emitted 36 groups. That result does not change the Tier-0 SKIP status."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-001",
+      "verification_summary": "AUDIT_CORRECTIONS_CYCLE1.md preserves and individually resolves the three historical empty commits to committed state-ID evidence or a verified no-op; clean-clone regression groups 27, 32, and 35 pass at the fixed commit."
+    },
+    {
+      "finding_id": "F-002",
+      "verification_summary": "Recomputed scripts/26_neb_harness.py as SHA-256 2de0057fc5c81614d7f5cae85c129f22d523a2a093d00271baf468dab339132d and 12243 bytes, matching both q0 and q1 staging manifests; Tier-0 C-HASH-001 passes."
+    },
+    {
+      "finding_id": "F-003",
+      "verification_summary": "The q1 staging record labels the absent source and BLOCKED_DO_NOT_SUBMIT rather than asserting it is present; fixed-path records declare unavailable raw provenance; Tier-0 C-HASH-002 finds no manifest-declared locator absent."
+    },
+    {
+      "finding_id": "F-004",
+      "verification_summary": "RESULTS_INDEX.md, Q0_NEB_GATE.md, results/objective2/CURRENT_STATUS.md, and EXPERIMENT_AUDIT.md agree on gate ALL FIVE PASS and launch NOT performed; Tier-0 C-STATE-001 passes."
+    },
+    {
+      "finding_id": "F-007",
+      "verification_summary": "README.md and results/objective2/CURRENT_STATUS.md declare 36 groups, and python3 scripts/20_test_checks.py completed successfully in an isolated clone while emitting groups [1] through [36]."
+    }
+  ],
+  "summary": "BLOCK: Q3 raw provenance is still absent and the claimed demotion did not propagate to all authority and gate documents. Tier-0 link resolution also remains failed, and its declared test check was skipped despite an independently successful isolated run.",
+  "coverage": {
+    "evidence_manifest_sha256": "c546b4176ddf115ec90f5daf88ee8cece8a91e15d504d3b16b08307d402c5db4",
+    "paths_examined": 78,
+    "method": "Traversed the canonical index and objective authorities first, then their cited raw/manifest/script artifacts, all files changed by the fixed commit, Tier-0 violations, and an isolated-clone test entrypoint; independently recomputed Objective 2 statistics from 108 raw rows.",
+    "not_examined": [
+      "No execution of HPC, GPU, scheduler, or instrument work was possible or attempted.",
+      "Large binary/raw archives outside the cited Objective 1 and Objective 2 evidence chains were not fully numerically recomputed."
+    ]
+  }
+}

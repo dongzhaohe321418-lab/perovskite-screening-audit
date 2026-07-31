@@ -1,0 +1,15 @@
+{
+  "cycle_id": "CYCLE-000002",
+  "audited_commit": "bfece650948a2b08c4ed6a818015b1f493561fed",
+  "runner": "codex-cli",
+  "model": "gpt-5.6",
+  "prompt_sha256": "49097c9839995bb07a38e64e1936453862caffbbc78d733fc27f6eb6cc68397a",
+  "started_at": "2026-07-31T02:54:08Z",
+  "completed_at": "2026-07-31T03:00:09Z",
+  "policy_bundle": {
+    "checks_sha256": "a9f45ab1eb6f6f9f40d9d74c5cadf9e3af35f9d7d0a9c77313277e6b8738c11c",
+    "constitution_sha256": "0dbdc5579f414453dc65c864764798c51bbbe2ebd46ae1d29c96a4e52f3dad00",
+    "rulebook_sha256": "86c911eb6b0730442d706f8a5567e50a70815958c4e6b4508573031512c6d512",
+    "rulebook_version": "1.0.0"
+  }
+}
