@@ -127,8 +127,9 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.ericdong.audit-loop.
 |---|---|
 | **机械证明** | controller 66 个单元测试 + 编排器 10 个单元测试;Tier-0 12 项检查在真实仓库上确定性可复现;干净克隆在陌生路径 install + 全套测试通过 |
 | **模拟端到端** | `selftest.py` 全链路 4/4,但 Codex 由 `--simulate-codex` 桩替代 |
-| **真实审计** | 5 轮真实 Codex 审计(1 轮生产 + 4 轮 mutation),每轮 ~316 万 input tokens |
-| **未验证** | **验证关闭路径(disposition → 修复 → 复审 → verified closure)从未用真实审计器跑通**。相关两处缺陷由推理+单元测试修复,不等于端到端成立。 |
+| **真实审计** | 6 轮真实 Codex 审计,每轮 ~316 万 input tokens |
+| **完整闭环** | **2026-07-31 走通一整圈**:CYCLE-000001 判 BLOCK/7 findings → 逐条 disposition → 单个 fix commit `bfece650` → CYCLE-000002 独立复审 → **F-001/002/003/004/007 五条验证关闭**,Tier-0 hard_fail 4→0。关闭由 controller 的 finding 生命周期校验强制,不是自我声明。 |
+| **仍未验证** | 高风险动作的机械强制:`check_action` 可达且每次咨询入账,但调用点仍是建议性的——把咨询装进动作本身尚未做。 |
 
 其他必须随结论一同引用的限制:
 
