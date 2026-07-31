@@ -34,7 +34,7 @@ def final_blocked_cycle(tmp_path):
             {
                 "finding_id": "F-002",
                 "title": "Issue 2",
-                "severity": "MEDIUM",
+                "severity": "HIGH",
                 "status": "OPEN",
                 "blocked_scopes": ["publish_claim"],
             },

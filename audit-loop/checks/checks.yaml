@@ -286,8 +286,8 @@ test_command: "python3 scripts/20_test_checks.py"
 #   test_command_enabled: true
 #   test_python: "/path/to/env/bin/python3"   # e.g. a conda env with the repo's deps
 # With it false, C-TEST-001 reports SKIP and claims nothing about the suite either way.
-test_command_enabled: false
-test_python: null
+test_command_enabled: true
+test_python: "/Users/ericdong/.claude-science/conda/envs/dft/bin/python3.12"
 test_timeout_seconds: 900
 test_env:
   MPLBACKEND: "Agg"

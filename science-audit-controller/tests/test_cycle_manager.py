@@ -538,3 +538,37 @@ def test_receipt_without_prompt_hash_is_rejected(tmp_path):
 
     assert not result.valid
     assert any("prompt_sha256" in error for error in result.errors)
+
+
+def test_a_low_finding_in_a_block_cycle_need_not_declare_blocked_scopes(tmp_path):
+    """Constitution 12: only CRITICAL and HIGH gate an increment.
+
+    Requiring blocked_scopes on every finding of a BLOCK cycle forced a LOW
+    finding to declare what it blocks, and rejected an auditor that graded
+    honestly — which is what happened to a real cycle.
+    """
+    storage, fake, cycle, validator = make_cycle(tmp_path)
+    result = validate_artifacts(
+        fake, validator, cycle, "0" * 40, "3" * 40, decision="BLOCK",
+        findings=[
+            {"finding_id": "F-001", "title": "gating", "severity": "HIGH",
+             "status": "OPEN", "blocked_scopes": ["publish_claim"]},
+            {"finding_id": "F-002", "title": "recorded only", "severity": "LOW",
+             "status": "OPEN"},
+        ],
+    )
+
+    assert result.valid, result.errors
+    assert storage.get_cycle(cycle.cycle_id).status.value == "FINAL"
+
+
+def test_a_block_cycle_needs_something_that_actually_gates(tmp_path):
+    storage, fake, cycle, validator = make_cycle(tmp_path)
+    result = validate_artifacts(
+        fake, validator, cycle, "0" * 40, "3" * 40, decision="BLOCK",
+        findings=[{"finding_id": "F-001", "title": "advisory", "severity": "LOW",
+                   "status": "OPEN"}],
+    )
+
+    assert not result.valid
+    assert any("CRITICAL or HIGH" in e for e in result.errors)

@@ -832,7 +832,9 @@ class Orchestrator:
   你如何选择与遍历这些路径),可选 not_examined(明确未覆盖的部分)。
   非空的引用列表不等于覆盖:一份"什么都没看"的合规 PASS 不是裁决。诚实申报未覆盖部分
   不会被惩罚——隐瞒才会。
-  decision=BLOCK 时每个 finding 必须带 blocked_scopes(从以下取值:submit_production_job,
+  decision=BLOCK 时**只有 CRITICAL/HIGH 的 finding** 必须带 blocked_scopes;
+  MEDIUM/LOW/INFO 只记录、不阻断,**不得**带 blocked_scopes(宪法 §12)。BLOCK 至少要有一条
+  CRITICAL 或 HIGH,否则没有任何东西在阻断,应改用 PASS_WITH_CAVEATS。blocked_scopes(从以下取值:submit_production_job,
   stop_production_job, publish_claim, change_locked_protocol, exclude_scientific_data,
   increase_budget, operate_instrument,或 "*");非 BLOCK 时任何 finding 不得带 blocked_scopes。
   evidence 数组第一项必须是规则引用,格式 "cite: <宪法 Gate/节号> / <R-XXX-NNN 或 C-XXX-NNN>";

@@ -44,6 +44,8 @@ FORBIDDEN_FILENAMES = {
     "pi_approval.json",
 }
 AUDIT_DECISIONS = {"PASS", "PASS_WITH_CAVEATS", "BLOCK", "NOT_VERIFIABLE"}
+# Constitution 12: these two gate an increment; everything below is recorded only.
+BLOCKING_SEVERITIES = {"CRITICAL", "HIGH"}
 
 
 class ReportValidator:
@@ -276,12 +278,28 @@ class ReportValidator:
         overlap = set(finding_ids).intersection(closure_ids)
         if overlap:
             errors.append(f"findings cannot be both open and verified closed: {sorted(overlap)}")
+        # Constitution 12: only CRITICAL and HIGH gate an increment; MEDIUM, LOW and
+        # INFO are recorded and never block. Requiring blocked_scopes on every
+        # finding of a BLOCK cycle contradicted that — it forced a LOW finding to
+        # declare what it blocks, and rejected the auditor for grading honestly.
         if decision == "BLOCK":
             if not findings:
                 errors.append("BLOCK requires at least one finding")
-            for finding in findings:
+            blocking = [f for f in findings if f.get("severity") in BLOCKING_SEVERITIES]
+            if findings and not blocking:
+                errors.append(
+                    "BLOCK requires at least one CRITICAL or HIGH finding; nothing here "
+                    "gates the increment"
+                )
+            for finding in blocking:
                 if not finding.get("blocked_scopes"):
                     errors.append(f"BLOCK finding lacks blocked_scopes: {finding.get('finding_id')}")
+            for finding in findings:
+                if finding.get("severity") not in BLOCKING_SEVERITIES and finding.get("blocked_scopes"):
+                    errors.append(
+                        f"only CRITICAL or HIGH findings may block: {finding.get('finding_id')} "
+                        f"is {finding.get('severity')} yet declares blocked_scopes"
+                    )
         else:
             for finding in findings:
                 if finding.get("blocked_scopes"):
