@@ -1,0 +1,69 @@
+{
+  "cycle_id": "CYCLE-000005",
+  "audited_commit": "b7de47840a74d0e6fc5321912e54f4d05fbab7f1",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-012",
+      "title": "Q3 authority alignment values do not reproduce from the committed derivation",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "submit_production_job",
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 2 / R-EVD-003",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "P1_REFERENCE_AUDIT.md:47-48 and Q0_RESOLVED.md:16 quote VBM-referenced +75.9 meV and semicore-aligned +52.1 meV, and each document's provenance banner says derive_q3.py recomputes every quoted value.",
+        "derive_q3.py:189-196 instead computes and prints VBM-referenced -75.8 meV and semicore-referenced -33.5 meV from the committed raw outputs. Reversing subtraction direction could account for the VBM sign but cannot reconcile 52.1 with 33.5 meV.",
+        "reproduce: python3 results/objective1/dft/charge_relaxed/q3_raw/derive_q3.py | rg '\\[align\\]'; rg -n 'VBM-referenced|semicore-aligned' results/objective1/dft/charge_relaxed/P1_REFERENCE_AUDIT.md results/objective1/dft/charge_relaxed/Q0_RESOLVED.md",
+        "proposed_check: C-Q3-NUM-001 — run derive_q3.py, parse its normalized VBM and semicore alignment outputs, and require every Q3 authority table/summary to match the same declared subtraction convention and values; a fixture retaining +52.1 meV when the derivation emits -33.5 meV must fail."
+      ]
+    },
+    {
+      "finding_id": "F-013",
+      "title": "Canonical Q3 index asserts mutually incompatible raw-provenance states",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "submit_production_job",
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:36-46 currently asserts that Q3 raw inputs are not committed and quoted values cannot be reproduced from committed records; its lines 51-55 assert the same raw records are COMMITTED and derive_q3.py exits 0.",
+        "The index-named authority documents Q0_POLARON_EXCLUDED.md:1-8, Q0_RESOLVED.md:1-8, and P1_REFERENCE_AUDIT.md:1-8 likewise assert that the raw records are now committed. The absent-raw assertion is unmarked and current.",
+        "reproduce: sed -n '34,58p' RESULTS_INDEX.md; for f in results/objective1/dft/charge_relaxed/Q0_POLARON_EXCLUDED.md results/objective1/dft/charge_relaxed/Q0_RESOLVED.md results/objective1/dft/charge_relaxed/P1_REFERENCE_AUDIT.md; do sed -n '1,8p' \"$f\"; done",
+        "proposed_check: C-Q3-STATUS-001 — parse each canonical Q3 index row and its discovered authorities; when the row names committed q3_raw evidence and derive_q3.py exits 0, reject any unmarked assertion in that row or authority that raw inputs are not committed or cannot be reproduced. The present Q3 row is the failing fixture."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-006",
+      "verification_summary": "In an isolated clean clone at the audited commit, the committed Q3 raw outputs, custody record, 160-to-159 mapping artifact, and derive_q3.py were present; the derivation exited 0 after recomputing the recorded Q3 evidence chain."
+    },
+    {
+      "finding_id": "F-008",
+      "verification_summary": "The three Q3 authority documents discovered from RESULTS_INDEX.md each carry the required Q3 provenance/demotion banner, and clean-clone regression group 37 exercised the index-discovered authority sweep successfully."
+    },
+    {
+      "finding_id": "F-011",
+      "verification_summary": "Q0_POLARON_EXCLUDED.md marks the former plateau statement SUPERSEDED, while q0_final_ns1.out.gz contains the formal QE convergence block and the current gate/index state agrees that both q=0 endpoints converged."
+    }
+  ],
+  "summary": "BLOCK: independently recomputable Q3 raw evidence is now present, but its alignment values conflict with the authority documents and the canonical index retains contradictory raw-provenance assertions.",
+  "coverage": {
+    "evidence_manifest_sha256": "c546b4176ddf115ec90f5daf88ee8cece8a91e15d504d3b16b08307d402c5db4",
+    "paths_examined": 33,
+    "method": "Read the canonical index and Objective 1 authorities in prescribed order, then traced Q3 claims through committed raw outputs, custody records, the mapping record, derivation code, raw QE convergence output, and a clean-clone test execution.",
+    "not_examined": [
+      "Objective 2 and XRD raw datasets were not independently recomputed this re-audit; their current Tier-0 checks were reviewed only.",
+      "No remote cluster, scheduler, or instrument state was accessed."
+    ]
+  }
+}
