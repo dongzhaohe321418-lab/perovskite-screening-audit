@@ -1,0 +1,25 @@
+{
+  "cycle_id": "CYCLE-000009",
+  "audited_commit": "a75e2f7f2d0d4de113674aeb2a5490e1c79bfcd5",
+  "decision": "PASS",
+  "findings": [],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-005",
+      "verification_summary": "Tier-0 C-LINK-001 is PASS at the fixed commit: 387/387 repository-path-shaped references resolve across 73 scanned files. This independently re-audits the formerly unresolved-link condition without contradicting the authoritative machine verdict."
+    },
+    {
+      "finding_id": "F-009",
+      "verification_summary": "In an isolated detached clone at the fixed commit, python3 scripts/20_test_checks.py exited 0 and completed the numbered suite through group 41; Tier-0 C-TEST-001 also records a HARD PASS in its pristine clone."
+    }
+  ],
+  "summary": "PASS: no open findings. F-005 and F-009 are independently verified closed at a75e2f7f2d0d4de113674aeb2a5490e1c79bfcd5.",
+  "coverage": {
+    "evidence_manifest_sha256": "203ca0be8bbae30231c472b4d5f643745f25ebfcc9b7a023a4bcc219001ca571",
+    "paths_examined": 464,
+    "method": "Enumerated the complete tracked tree, then traversed current navigation and authority documents, manifests, raw Q3/XRD inputs, derivation scripts, the full isolated regression suite, and Tier-0 results; prior findings were selected from cycle context and independently rechecked.",
+    "not_examined": [
+      "No remote scheduler, instrument, or uncommitted external evidence was accessed; the verdict applies only to the fixed committed snapshot."
+    ]
+  }
+}
