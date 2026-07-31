@@ -1,28 +1,34 @@
 {
   "escalations": [
     {
+      "acknowledged_at": "2026-07-31T05:00:16.224519+00:00",
+      "acknowledged_by": "mcp",
+      "cycle_ids": [
+        "CYCLE-000001",
+        "CYCLE-000002",
+        "CYCLE-000004"
+      ],
       "escalation_id": "ESC-0001",
       "finding_id": "F-005",
-      "reason": "unresolved across 3 audit cycles",
-      "cycle_ids": [
-        "CYCLE-000001",
-        "CYCLE-000002",
-        "CYCLE-000004"
-      ],
       "opened_at": "2026-07-31T04:04:08.683851+00:00",
-      "status": "OPEN"
+      "reason": "unresolved across 3 audit cycles",
+      "resolution_note": "F-005 (link resolution): CYCLE-000004's Tier-0 reports C-LINK-001 PASS at 746564b6 \u2014 0 unresolved references, down from 151. The escalation reflects the finding spanning three cycles, not an unresolved defect: my CYCLE-000002 pass used a truncated extension list and left 23, which CYCLE-000003's Tier-0 caught and I fixed in 746564b6. No PI decision required; awaiting the controller's independent closure.",
+      "status": "ACKNOWLEDGED"
     },
     {
-      "escalation_id": "ESC-0002",
-      "finding_id": "F-006",
-      "reason": "unresolved across 3 audit cycles",
+      "acknowledged_at": "2026-07-31T05:00:16.230915+00:00",
+      "acknowledged_by": "mcp",
       "cycle_ids": [
         "CYCLE-000001",
         "CYCLE-000002",
         "CYCLE-000004"
       ],
+      "escalation_id": "ESC-0002",
+      "finding_id": "F-006",
       "opened_at": "2026-07-31T04:04:08.755017+00:00",
-      "status": "OPEN"
+      "reason": "unresolved across 3 audit cycles",
+      "resolution_note": "F-006 (Q3 provenance): each cycle raised a genuinely different gap, so the finding legitimately spans three cycles. CYCLE-000002 asked for raw records \u2014 committed at ddaca3f with cluster-side SHA-256 custody and a derivation script. CYCLE-000004 then correctly found that script did not cover the P1/P2 cosine and alignment values \u2014 fixed at b7de4784 with a committed shared-atom mapping (159 pairs, one unmatched vacancy-filling atom) and a derivation that rebuilds it from raw and asserts cosine 0.9757, its controls, the IPRs and both alignment references, with a verified corruption fixture. Q3 remains NOT CITABLE pending independent re-verification. No PI decision required.",
+      "status": "ACKNOWLEDGED"
     }
   ]
 }
