@@ -337,3 +337,12 @@ auditor_instruction_regexes:
   # English-only by design: this repository's own governing guide legitimately
   # enumerates 可报告/不可报告 claim lists, so Chinese imperatives would be
   # near-certain false positives. Add them only with a scoped glob.
+
+# --- C-HASH-001 canonical-JSON contract ------------------------------------
+# A few hashes commit to a document's canonical JSON serialisation (sorted keys,
+# compact separators, no trailing newline) rather than to its stored bytes. The
+# controller computes evidence_manifest_sha256 that way, so byte-hashing it
+# compares the wrong object and fails a manifest that is actually correct.
+# List such hash keys here; everything else stays byte-exact.
+canonical_json_hash_keys:
+  - evidence_manifest_sha256

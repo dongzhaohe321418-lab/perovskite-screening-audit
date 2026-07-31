@@ -333,6 +333,19 @@ class ManifestEntry:
     ambiguous: bool = False
 
 
+def canonical_json_bytes(raw: bytes) -> bytes | None:
+    """Canonical JSON form: sorted keys, compact separators, no trailing newline.
+
+    Returns None when the payload is not JSON, so the caller can report the entry
+    as unresolved rather than assert a mismatch it cannot substantiate.
+    """
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return json.dumps(parsed, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
 def _is_hex_hash(value: Any, digits: int) -> bool:
     return isinstance(value, str) and bool(re.fullmatch(r"[0-9a-f]{%d}" % digits, value))
 
@@ -564,6 +577,7 @@ def c_hash_001(ctx: Ctx) -> dict[str, Any]:
     hashed = 0
     unresolved = 0
     first_bad: str | None = None
+    canonical_json_hash_keys = set(ctx.config.get("canonical_json_hash_keys") or [])
     for entry in entries:
         if entry.hash_hex is None:
             continue
@@ -576,7 +590,17 @@ def c_hash_001(ctx: Ctx) -> dict[str, Any]:
             unresolved += 1
             continue
         hashed += 1
-        actual_full = hashlib.sha256(raw).hexdigest()
+        if entry.hash_key in canonical_json_hash_keys:
+            # Some hashes commit to a document's canonical JSON serialisation rather
+            # than to its stored bytes, so byte-hashing them compares the wrong
+            # object and fails a manifest that is in fact correct.
+            canonical = canonical_json_bytes(raw)
+            if canonical is None:
+                unresolved += 1
+                continue
+            actual_full = hashlib.sha256(canonical).hexdigest()
+        else:
+            actual_full = hashlib.sha256(raw).hexdigest()
         actual = actual_full[: entry.hash_digits]
         if actual != entry.hash_hex:
             first_bad = first_bad or resolved
