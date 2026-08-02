@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000010:69fa653777eb",
+  "cycle_id": "CYCLE-000010",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "All three references repointed at 89db467e627b2c998a85e8e1ef01c50e170a3801: RESULTS_INDEX.md:32 now carries the full results/objective1/dft/charge_relaxed/ prefix for PRODUCTION_NEB_STATUS.md; that file's two JSON record references now carry their q0_production/ and q1_production/ subdirectory prefixes. Verified zero remaining violations in both files under C-LINK-001's exact semantics (extension list, ignore regexes, document-relative-or-repo-root resolution read from audit-loop/checks/deterministic_checks.py). Process note: my first re-check used a stricter home-grown pattern that flagged 11 extra 'violations'; those are prose file-names the real checker resolves document-relatively or skips \u2014 I verified against the checker's own rules before editing, rather than fixing non-defects.",
+      "finding_id": "F-016",
+      "fix_commit": "89db467e627b2c998a85e8e1ef01c50e170a3801"
+    }
+  ],
+  "report_sha256": "69fa653777eb27c3fb426dc00c0ba66dfe715cf0fb00a4f69bd5f0f47f4e8035",
+  "report_sha256_confirmed": true
+}
