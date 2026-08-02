@@ -1,0 +1,32 @@
+{
+  "cycle_id": "CYCLE-000011",
+  "audited_commit": "c1e973cac911cba9efcbbb6966ca5eb8d1d12302",
+  "decision": "PASS_WITH_CAVEATS",
+  "findings": [
+    {
+      "finding_id": "F-016",
+      "title": "Three current repository-path-shaped references are unresolved",
+      "severity": "LOW",
+      "status": "OPEN",
+      "evidence": [
+        "cite: Gate 11 / R-EVD-002",
+        "finding_class: SOFT",
+        "source: DETERMINISTIC",
+        "check_id: C-LINK-001",
+        "Tier-0 resolved 393 repository-path-shaped references in 74 scanned files and found three unresolved references.",
+        "RESULTS_INDEX.md:32 references PRODUCTION_NEB_STATUS.md without its results/objective1/dft/charge_relaxed/ directory; PRODUCTION_NEB_STATUS.md:24 and :26 reference q0_verify_last.json and CONVERGENCE_SUMMARY_q1.json without their q0_production/ and q1_production/ directories.",
+        "The target artifacts exist at results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md, results/objective1/dft/charge_relaxed/q0_production/q0_verify_last.json, and results/objective1/dft/charge_relaxed/q1_production/CONVERGENCE_SUMMARY_q1.json."
+      ]
+    }
+  ],
+  "summary": "PASS_WITH_CAVEATS: production CI-NEB evidence custody, terminal convergence records, archive indexes, pair fingerprint, and clean-clone regression entrypoint were independently checked; only the existing non-blocking F-016 navigation defect remains open.",
+  "coverage": {
+    "evidence_manifest_sha256": "b10395d17dbecbf852c2028c9018ed9c1a85dafdc62bd9f875d5d5810737bdc8",
+    "paths_examined": 67,
+    "method": "Read the canonical index and Objective 1 authorities first, then traversed the production manifests, inputs, raw compressed outputs, archive indexes, custody records, and regression entrypoint; used whole-tree hash and text sweeps for the declared evidence and production-value checks.",
+    "not_examined": [
+      "Live remote/HPC files, scheduler state, and PI/controller systems were inaccessible by design and were not contacted.",
+      "No new barrier-extraction derivation exists at this commit, so no extracted production barrier calculation was available to recompute."
+    ]
+  }
+}
