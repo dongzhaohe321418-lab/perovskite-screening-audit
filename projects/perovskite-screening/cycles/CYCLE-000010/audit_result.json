@@ -1,0 +1,33 @@
+{
+  "cycle_id": "CYCLE-000010",
+  "audited_commit": "e967e47176f2eb06ec7843c94ec3f30f3929cff9",
+  "decision": "PASS_WITH_CAVEATS",
+  "findings": [
+    {
+      "finding_id": "F-016",
+      "title": "Three current repository-path-shaped references are unresolved",
+      "severity": "LOW",
+      "status": "OPEN",
+      "evidence": [
+        "cite: Gate 11 / R-EVD-002",
+        "finding_class: SOFT",
+        "source: DETERMINISTIC",
+        "check_id: C-LINK-001",
+        "Tier-0 resolved 393 path-shaped references in 74 scanned files and found three unresolved references.",
+        "RESULTS_INDEX.md:32 references PRODUCTION_NEB_STATUS.md without its results/objective1/dft/charge_relaxed/ directory; PRODUCTION_NEB_STATUS.md:24 and :26 reference q0_verify_last.json and CONVERGENCE_SUMMARY_q1.json without their q0_production/ and q1_production/ directories.",
+        "The underlying tracked artifacts exist at results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md, results/objective1/dft/charge_relaxed/q0_production/q0_verify_last.json, and results/objective1/dft/charge_relaxed/q1_production/CONVERGENCE_SUMMARY_q1.json."
+      ]
+    }
+  ],
+  "verified_closed_findings": [],
+  "summary": "PASS_WITH_CAVEATS: no HARD Tier-0 failure, HARD skip, or independently demonstrated HARD defect was found; F-016 records the three non-blocking unresolved references from C-LINK-001.",
+  "coverage": {
+    "evidence_manifest_sha256": "203ca0be8bbae30231c472b4d5f643745f25ebfcc9b7a023a4bcc219001ca571",
+    "paths_examined": 38,
+    "method": "Read current navigation, authority, gate, raw-data, derivation, summary, and XRD records in §4.3 order; executed the clean-clone regression suite and independently recomputed Q3, Objective 2, and XRD high-impact values from committed inputs.",
+    "not_examined": [
+      "No line-by-line manual review of every one of the 481 tracked paths; Tier-0 tree-wide JSON, hash, tree-safety, and manifest checks were accepted as machine truth.",
+      "No remote scheduler, instrument, or external cluster state was accessed."
+    ]
+  }
+}
