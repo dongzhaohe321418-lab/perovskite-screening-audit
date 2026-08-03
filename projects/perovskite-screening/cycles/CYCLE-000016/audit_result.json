@@ -1,0 +1,42 @@
+{
+  "cycle_id": "CYCLE-000016",
+  "audited_commit": "a9c5f0f5c90afd9036f900bcd31a43b103225874",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-019",
+      "title": "Q3 gate-evidence prohibition conflicts with the current Q0 condition-3 PASS",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:38-45 marks Q3 UNVERIFIED / NOT CITABLE and expressly says it stays removed as gate evidence and must not support any production/publication claim until an audit cycle closes the Q3 findings.",
+        "results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md:6-12 presents the current five-condition table and records condition 3, ‘P1/P2 show no competing localised spin state,’ as PASS on the same Q3 P1/P2 raw evidence; the table is the gate stated to control Q2 CI-NEB action.",
+        "The two current status assertions cannot both govern the same Q3 evidence: the canonical index prohibits its gate use while the current Q0 authority credits it as a passing gate condition.",
+        "reproduce: rg -n -F 'stays removed as gate evidence' RESULTS_INDEX.md && rg -n -F 'must not be cited or used to support any production/publication claim' RESULTS_INDEX.md && rg -n -F '| 3 | P1/P2 show no competing localised spin state | **PASS**' results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md",
+        "proposed_check: C-STATE-004 — parse canonical-index question blocks that declare evidence removed from gate use or prohibited pending audit closure, discover current gate documents, and fail if a current PASS condition cites that evidence without an explicit committed controller-closure artifact; a fixture retaining the present Q3 prohibition with Q0 condition 3 PASS must fail."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-018",
+      "verification_summary": "At a9c5f0f5c90afd9036f900bcd31a43b103225874, .audit/audit_request.json's declared evidence_manifest_sha256 equals the raw-byte SHA-256 and canonical-JSON SHA-256 of .audit/evidence_manifest.json (6349fc6894e336a0b075e49d2fa7c4d7454ac5e43579956b7ab6dbbc70656ce3). The manifest's declared non-.audit tree SHA-256 independently recomputed as 609c9015c5948a9f16fa85da6e18d5f75c900857e5af0d6a24bcf8431903d158."
+    }
+  ],
+  "summary": "F-018 is independently verified closed, but a current Q3/Q0 gate-status contradiction blocks the requested publish claim.",
+  "coverage": {
+    "evidence_manifest_sha256": "6349fc6894e336a0b075e49d2fa7c4d7454ac5e43579956b7ab6dbbc70656ce3",
+    "paths_examined": 481,
+    "method": "Enumerated all 481 tracked tree entries and their modes, then followed README and RESULTS_INDEX authorities to read and cross-check the changed audit records, Q2 gate/protocol/production raw outputs, Q3 authorities/raw derivation/mapping, Q1 corpus records, XRD source scan/sidecar/kernel, and the clean-clone regression suite.",
+    "not_examined": [
+      "No manual line-by-line semantic review of every tracked source and historical document beyond the authority-guided and regression-guided traversal.",
+      "No remote scheduler, HPC filesystem, instrument, or network state; conclusions apply only to the fixed committed snapshot."
+    ]
+  }
+}
