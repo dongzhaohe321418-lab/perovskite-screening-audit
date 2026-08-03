@@ -1,0 +1,68 @@
+{
+  "cycle_id": "CYCLE-000017",
+  "audited_commit": "39fb71f740505d342f0d1b1ec232744f5a7f0e8c",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-019",
+      "title": "Q3 gate-evidence citability remains internally contradictory",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:38-44 asserts STATUS: CITABLE and restores Q3 as admissible Q0 condition-3 gate evidence; the same current Q3 block at :59-60 says the row stays NOT CITABLE, and :70-73 repeats Status stays NOT CITABLE. Neither later assertion is labelled HISTORICAL, SUPERSEDED, or RETRACTED.",
+        "results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md:6-12 records condition 3 as PASS, while results/objective1/dft/charge_relaxed/Q3_CLOSURE_RECORD.md:18-20 says Q3 is restored as CITABLE. The current index therefore asserts both citable and non-citable states for the same gate evidence.",
+        "reproduce: rg -n 'STATUS: CITABLE|row stays NOT CITABLE|Status stays NOT CITABLE|condition-3 PASS' RESULTS_INDEX.md results/objective1/dft/charge_relaxed/Q3_CLOSURE_RECORD.md",
+        "proposed_check: C-STATE-004 amendment — parse every status predicate in the bounded canonical Q3 block, classify only explicitly marked historical/superseded/retracted predicates as non-current, and fail if any current NOT-CITABLE predicate coexists with current STATUS: CITABLE or condition-3 PASS; a fixture retaining this commit's lines 38-44 and 59-60 must fail."
+      ]
+    },
+    {
+      "finding_id": "F-020",
+      "title": "Q3 one-state regression masks the current contradictory state",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: §10 / R-GRD-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "scripts/20_test_checks.py:1188-1195 defines _q3_banned as a NOT-CITABLE match AND not _q3_citable. Consequently the present bounded Q3 block, which has both predicates, yields citable=True, not_citable=True, current_test_banned=False and does not fail the advertised one-state assertion.",
+        "The isolated-copy execution of python3 scripts/20_test_checks.py exited 0 and printed ALL TESTS PASSED despite the unmarked mixed Q3 status documented in F-019; its group [43] output calls the condition OK rather than detecting the contradiction.",
+        "reproduce: python3 scripts/20_test_checks.py",
+        "proposed_check: C-GUARD-003 — execute the Q3 status regression against a committed fixture that contains both current STATUS: CITABLE and current NOT CITABLE predicates plus a condition-3 PASS row; require nonzero exit, while a fixture where the NOT-CITABLE text is explicitly HISTORICAL passes."
+      ]
+    },
+    {
+      "finding_id": "F-021",
+      "title": "One current Q3 derivation locator is unresolved",
+      "severity": "LOW",
+      "status": "OPEN",
+      "evidence": [
+        "cite: Gate 11 / R-EVD-002",
+        "source: DETERMINISTIC",
+        "finding_class: SOFT",
+        "check_id: C-LINK-001",
+        "Tier-0 reports RESULTS_INDEX.md:42 references q3_raw/derive_q3.py, which resolves to neither an index-relative nor a repository-root-relative tracked path. The tracked script is results/objective1/dft/charge_relaxed/q3_raw/derive_q3.py.",
+        "reproduce: test -e q3_raw/derive_q3.py && echo exists || echo absent"
+      ]
+    }
+  ],
+  "verified_closed_findings": [],
+  "summary": "BLOCK. Previously open F-019 is not independently verified closed: the fixed commit retains two unmarked NOT-CITABLE assertions in the same Q3 canonical block that declares CITABLE. The claimed regression protection also passes on that contradictory state. F-021 is a nonblocking deterministic link finding.",
+  "coverage": {
+    "evidence_manifest_sha256": "6349fc6894e336a0b075e49d2fa7c4d7454ac5e43579956b7ab6dbbc70656ce3",
+    "paths_examined": 41,
+    "method": "Read the canonical index and Objective 1 authorities first, then traversed their cited Q3 raw records, derivation, manifests, production outputs, regression source and clean-copy execution; spot-checked current Objective 2 and XRD authorities and all controller-supplied policy artifacts.",
+    "not_examined": [
+      "No manual line-by-line inspection of every one of the 482 tracked paths; unselected historical/archive material was covered only insofar as the clean-copy regression suite traversed it.",
+      "No remote scheduler, cluster filesystem, instrument, or network state was accessed."
+    ]
+  }
+}
