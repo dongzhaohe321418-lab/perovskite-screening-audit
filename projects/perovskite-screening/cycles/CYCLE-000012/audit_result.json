@@ -1,0 +1,42 @@
+{
+  "cycle_id": "CYCLE-000012",
+  "audited_commit": "89db467e627b2c998a85e8e1ef01c50e170a3801",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-017",
+      "title": "Current Q2 authority documents assert incompatible production CI-NEB states",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "finding_class: HARD",
+        "source: JUDGMENT",
+        "RESULTS_INDEX.md:26 says ‘NEB not yet run’, while RESULTS_INDEX.md:32 says the PI-authorized q=0+q=+1 production pair ran and both legs converged.",
+        "The same index names results/objective1/dft/charge_relaxed/CHARGE_STATE_ANCHOR.md as authoritative at RESULTS_INDEX.md:28-29, but that file says at :4 that one required leg is missing and at :15-16 that q=0 is not delivered and comparison is impossible; results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md:1 instead says BOTH LEGS CONVERGED. Q0_NEB_GATE.md:112 additionally retains an unmarked pre-launch decision.",
+        "reproduce: rg -n 'NEB not yet run|both legs converged' RESULTS_INDEX.md && rg -n 'One of the two required legs is missing|q = 0 \\(V_I⁰\\) any relaxed quantity.*not delivered|charge-state comparison.*impossible' results/objective1/dft/charge_relaxed/CHARGE_STATE_ANCHOR.md && rg -n 'BOTH LEGS CONVERGED' results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md && rg -n 'full q=0 CI-NEB submission decision is now OPEN' results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md",
+        "proposed_check: C-STATE-003 — discover every Q2 authority named by RESULTS_INDEX.md and require production-NEB state predicates (not-run/missing/pre-launch versus ran/converged) to have one normalized current state or an explicit HISTORICAL/SUPERSEDED marker; a fixture retaining the present index/anchor/gate text must fail."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-016",
+      "verification_summary": "At 89db467e, RESULTS_INDEX.md:32 uses the full results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md path, and PRODUCTION_NEB_STATUS.md:24 and :26 use q0_production/q0_verify_last.json and q1_production/CONVERGENCE_SUMMARY_q1.json. Each target exists; Tier-0 C-LINK-001 independently reports 393/393 path-shaped references resolved."
+    }
+  ],
+  "summary": "BLOCK: Q2 current authority documents disagree on whether the production CI-NEB pair was run and converged. The prior F-016 link finding is verified closed.",
+  "coverage": {
+    "evidence_manifest_sha256": "b10395d17dbecbf852c2028c9018ed9c1a85dafdc62bd9f875d5d5810737bdc8",
+    "paths_examined": 23,
+    "method": "Read the canonical navigation and Q2 authority chain first, then independently traversed both production raw outputs, archives, custody manifests, inputs, status/gate records, the relevant regression suite, and the exact F-016 changed paths.",
+    "not_examined": [
+      "Full semantic review of all historical/archive prose beyond status-search hits",
+      "Independent scientific recomputation of Objective 2, XRD, literature-survey, proposal, and image/PDF claims not implicated by this production-NEB request",
+      "Remote scheduler, cluster filesystem, and instrument state (not accessible and outside read-only audit authority)"
+    ]
+  }
+}
