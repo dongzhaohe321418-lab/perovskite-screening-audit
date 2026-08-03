@@ -22,7 +22,11 @@ codex:
   command: __CODEX__
   # Constitution 1.2: Codex audits read-only; workspace-write confines writes
   # to the cycle directory (the science worktree lives outside it).
-  args: ["exec", "--skip-git-repo-check", "--sandbox", "workspace-write", "--color", "never"]
+  # Model pinned here, not read from the global ~/.codex/config.toml, so a change
+  # made there for another purpose cannot silently swap the auditor's model.
+  args: ["exec", "--skip-git-repo-check", "--sandbox", "workspace-write",
+         "--color", "never", "-m", "gpt-5.6-terra",
+         "-c", "model_reasoning_effort=\"medium\""]
   timeout_seconds: 5400
   max_retries: 1
   # Prior real audit transcripts in rulebook/calibration/ are injected as reference
@@ -51,7 +55,7 @@ retention:
 budget:
   # One measured cycle cost ~3.16M input tokens. Recorded per cycle in
   # state/cost_ledger.jsonl; exceeding the monthly cap defers new audits.
-  max_input_tokens_per_month: 120000000
+  max_input_tokens_per_month: 300000000
   enforce: true
 
 sync:

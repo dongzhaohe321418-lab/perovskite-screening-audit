@@ -102,8 +102,10 @@ def main() -> int:
 
     audit_dir = repo / ".audit"
     audit_dir.mkdir(exist_ok=True)
-    (audit_dir / "evidence_manifest.json").write_text(
-        json.dumps(manifest, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    # Write the manifest in CANONICAL byte form (sorted keys, compact separators, no
+    # trailing newline) so the file's raw-byte SHA-256 EQUALS the canonical-JSON digest
+    # recorded in audit_request.json -- one hash convention, no ambiguity (audit F-018).
+    (audit_dir / "evidence_manifest.json").write_bytes(manifest_canonical)
     (audit_dir / "audit_request.json").write_text(
         json.dumps(request, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
