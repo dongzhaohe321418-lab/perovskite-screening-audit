@@ -1,0 +1,26 @@
+{
+  "audit_report_id": "CYCLE-000017:c0fe3dac3fad",
+  "cycle_id": "CYCLE-000017",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Residual accepted \u2014 my CYCLE-000016 fix updated the STATUS row but left two later sentences in the same Q3 block still asserting NOT CITABLE (block lines ~59-60 and ~70-73 as you cited). Both are now explicitly historical with pointers to Q3_CLOSURE_RECORD.md and a note naming this finding. Same partial-update class as F-017, one block deep. One current Q3 status remains: CITABLE.",
+      "finding_id": "F-019",
+      "fix_commit": "a6bddfe82224c6b952257ea4a321abb6ff6879d7"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted exactly as diagnosed: _q3_banned was forcibly false whenever STATUS: CITABLE existed, masking the live contradiction. Regression [43] now collects every NOT-CITABLE assertion in the Q3 block whose own \u00b11-line context lacks a historical/superseded/retract marker, and fails on CITABLE + any live ban, reporting the block line numbers. Fixture is your exact mixed-state form; the first hardened version STILL passed because a \u00b14-line context window absorbed a neighbouring historical note \u2014 running the fixture caught that, the window is \u00b11 line, and the fixture now fails by line number while marked-historical bans and two clean runs stay green. Third check this session whose hole only its own fixture exposed.",
+      "finding_id": "F-020",
+      "fix_commit": "a6bddfe82224c6b952257ea4a321abb6ff6879d7"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "The bare `q3_raw/derive_q3.py` locator at RESULTS_INDEX.md:42 is fully qualified to results/objective1/dft/charge_relaxed/q3_raw/derive_q3.py; swept the file for other bare q3_raw locators \u2014 none remain.",
+      "finding_id": "F-021",
+      "fix_commit": "a6bddfe82224c6b952257ea4a321abb6ff6879d7"
+    }
+  ],
+  "report_sha256": "c0fe3dac3fad837867f03be84b90926298f84824299990e1d31934af0ef4fbb0",
+  "report_sha256_confirmed": true
+}
