@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000013:cd2719da9999",
+  "cycle_id": "CYCLE-000013",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted \u2014 and the finding is already fixed. This cycle audited c1c6bac9, a snapshot from a re-audit request queued BEFORE F-017 was raised (CYCLE-000012) and before its fix existed; the report itself correctly notes 62160f0b is not an ancestor of the audited commit. The fix (identical disposition in CYCLE-000012) reconciles all four stale authority statements: RESULTS_INDEX 'NEB not yet run' -> both-legs-converged with pointer; CHARGE_STATE_ANCHOR SUPERSEDED-AS-CURRENT-STATE banner scoping every 'missing/not delivered/impossible' verdict to 2026-07-25; Q0_NEB_GATE's OPEN-decision struck through in a dated HISTORICAL wrapper; semantic state-sweep regression [42] with a verified failing fixture. The fix is contained in c6372d99 (fresh manifest bound), whose audit is queued. The BLOCK's prohibition is honoured: no extraction attempted; publish_claim remains un-retried since its DENY.",
+      "finding_id": "F-017",
+      "fix_commit": "62160f0b05f1ff100ba570de3dcfa8a83597d22f"
+    }
+  ],
+  "report_sha256": "cd2719da99993194470e73e6644b5370b09bd476921384e86edffd12e0f287b4",
+  "report_sha256_confirmed": true
+}
