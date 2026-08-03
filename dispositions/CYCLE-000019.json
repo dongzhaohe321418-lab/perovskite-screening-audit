@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000019:e079e7cb8f22",
+  "cycle_id": "CYCLE-000019",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted \u2014 third layer of the same propagation defect: index STATUS fixed, then the block's later sentences, and each fix missed the next level down (the three authorities' provenance banners and the gate's condition-3 text). Fixed at 1cca3f648c25af1fc22a98a11d4319fa488aa4eb: (1) Q0_POLARON_EXCLUDED/Q0_RESOLVED/P1_REFERENCE_AUDIT each now OPEN with a CLOSED/CITABLE banner citing Q3_CLOSURE_RECORD.md, the demotion-era banner beneath explicitly historical, and its deep 'restored only when\u2026' sentences individually marked superseded \u2014 the extended regression caught two of these AFTER my manual sync, so the check found what the hand-edit missed. (2) Gate condition-3: 'Pending independent re-verification' \u2192 're-verification COMPLETE' citing the closure record; body 'owed' wording wrapped historical. (3) Regression [43] extended: CITABLE requires all three authorities to open with the banner and any demotion-era wording to sit in \u00b11-line historical context; gate must cite the record. Two fixtures verified failing (stripped banner; restored pending wording). 43 groups, two clean runs. Fresh manifest at 54861ef2. Barriers unextracted; publish_claim un-retried.",
+      "finding_id": "F-019",
+      "fix_commit": "1cca3f648c25af1fc22a98a11d4319fa488aa4eb"
+    }
+  ],
+  "report_sha256": "e079e7cb8f221e2123ed73f9457930426277c19cd90322beb7291d4da0f9a265",
+  "report_sha256_confirmed": true
+}
