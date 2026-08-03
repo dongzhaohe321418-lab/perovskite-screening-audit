@@ -1,0 +1,26 @@
+{
+  "audit_report_id": "CYCLE-000020:e7ef7c861c2b",
+  "cycle_id": "CYCLE-000020",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "This cycle audited a01e54cf, which predates the banner-propagation fix \u2014 the report itself notes 1cca3f64 is not an ancestor of the snapshot. The fix (dispositioned identically in CYCLE-000019) prepends the CLOSED/CITABLE banner to all three authorities with demotion-era text explicitly historical, synchronizes gate condition-3 to cite Q3_CLOSURE_RECORD.md, and extends regression [43] to enforce propagation (your C-STATE-006 semantics) with fixtures verified failing. Contained in the freshly queued 485106fa snapshot.",
+      "finding_id": "F-019",
+      "fix_commit": "1cca3f648c25af1fc22a98a11d4319fa488aa4eb"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted. The manifest's BLOCKED_DO_NOT_SUBMIT was correct about the committed tree at CYCLE-000001 F-003 (input genuinely uncommitted) and went stale after the launch + evidence commit. Superseded at bc98bda31b8aaf4836e38b815ed66f90ef341fd3 to SUBMITTED_AND_COMPLETED with the full v1 record preserved verbatim inside. The hash identity you flagged (q1_initial == q0_initial, 7af20ebb...) is now explained IN the manifest: established project physics \u2014 the q=0 initial-endpoint relaxation converged in ZERO BFGS steps, so the q=+1-relaxed geometry IS the q=0 stationary point; the artifact store deduplicated the two files by checksum on 2026-07-28 (EXPERIMENT_AUDIT \u00a71.8). The v1 note's 'never existed' over-concluded from git history alone. Your C-STATE-007 exists as regression [44]: BLOCKED-while-converged fails; a stale absent-claim fails when the path exists; fixture verified failing.",
+      "finding_id": "F-022",
+      "fix_commit": "bc98bda31b8aaf4836e38b815ed66f90ef341fd3"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted \u2014 the index claimed to cover every question but carried no row for the live passivator screen. Added QX row at bc98bda31b8aaf4836e38b815ed66f90ef341fd3: same-phase conclusion, instrumental-artifact finding, P5 ~10% PbI2 (3.8x control) / P3 below-detection dispositions, authority (PASSIVATOR_SCREEN.md + CN version), raw-data locators (xrd/data/, summary_metrics.csv, analysis code), and an explicit no-efficacy-claim scope line. Your C-NAV-005 exists as regression [45]: an unmarked current PASSIVATOR_SCREEN.md requires the index row naming it, the raw data, and a Current-conclusion field; fixture (stripped row) verified failing.",
+      "finding_id": "F-023",
+      "fix_commit": "bc98bda31b8aaf4836e38b815ed66f90ef341fd3"
+    }
+  ],
+  "report_sha256": "e7ef7c861c2b2246d7ac26fdf451bc30716e222960d85a8b27b39d6031272afa",
+  "report_sha256_confirmed": true
+}
