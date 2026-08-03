@@ -1,0 +1,22 @@
+{
+  "cycle_id": "CYCLE-000014",
+  "audited_commit": "62160f0b05f1ff100ba570de3dcfa8a83597d22f",
+  "decision": "PASS",
+  "findings": [],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-017",
+      "verification_summary": "At the fixed commit, RESULTS_INDEX.md and PRODUCTION_NEB_STATUS.md consistently state both production legs converged; CHARGE_STATE_ANCHOR.md explicitly supersedes its pre-production assertions, and Q0_NEB_GATE.md explicitly marks the former open-decision text historical. Independent decompression found q=0 convergence at iteration 36 and q=+1 convergence at iteration 37, each followed by JOB DONE. The clean-clone 42-group suite passed, while removing the supersession marker in an isolated fixture made group 42 fail."
+    }
+  ],
+  "summary": "PASS: F-017 is independently verified closed; no new open findings were identified at the fixed commit.",
+  "coverage": {
+    "evidence_manifest_sha256": "b186cda7d3d8569ed0832f901f039a85cd4333b8af6813592d7e7b993a09deab",
+    "paths_examined": 26,
+    "method": "Read the canonical index and current authorities first, then traced their Q1/Q2/Q3 raw-data, derivation, gate, regression, and fix-diff dependencies in a clean detached clone.",
+    "not_examined": [
+      "No line-by-line independent review of every historical archive document.",
+      "No production barrier extraction was performed or assessed because none is reported at this commit."
+    ]
+  }
+}
