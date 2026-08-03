@@ -27,12 +27,13 @@ what the gate permitted, and what each cycle cost. Generated; do not edit.
 | [CYCLE-000019](cycles/CYCLE-000019.md) | `a6bddfe82224` | BLOCK | 1 | RECORDED | 2 |
 | [CYCLE-000020](cycles/CYCLE-000020.md) | `a01e54cff813` | BLOCK | 3 | RECORDED | 0 |
 | [CYCLE-000021](cycles/CYCLE-000021.md) | `1cca3f648c25` | BLOCK | 2 | RECORDED | 1 |
-| [CYCLE-000022](cycles/CYCLE-000022.md) | `54861ef2b9fd` | BLOCK | 3 | TASK_CREATED | 0 |
+| [CYCLE-000022](cycles/CYCLE-000022.md) | `54861ef2b9fd` | BLOCK | 3 | RECORDED | 0 |
+| [CYCLE-000023](cycles/CYCLE-000023.md) | `bc98bda31b8a` | BLOCK | 1 | TASK_CREATED | 2 |
 
 ## Totals
 
-- cycles finalized: 21
-- findings verified closed: 20
+- cycles finalized: 22
+- findings verified closed: 22
 - audit input tokens: 61,942,338
 
 ## Files

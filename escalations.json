@@ -59,6 +59,36 @@
       "reason": "unresolved across 3 audit cycles",
       "resolution_note": "F-019's three raises are one defect chased across stale snapshots: CYCLE-000016 raised it at a9c5f0f5; the fix 39fb71f7 went to CYCLE-000017's snapshot, which found a real RESIDUAL - two surviving NOT-CITABLE sentences deeper in the same block - fixed at a6bddfe8 with the hardened one-state regression [43] and the auditor's exact mixed-state fixture verified failing; CYCLE-000018 audited 27dd4bd2, a pre-fix snapshot from an earlier queued request, and correctly noted the fix was not an ancestor. The complete fix is contained in a01e54cf (current HEAD), whose audit request is queued; that cycle should render the closure verdict. Not claiming closure - that is the auditor's to give.",
       "status": "ACKNOWLEDGED"
+    },
+    {
+      "acknowledged_at": "2026-08-03T08:11:46.310053+00:00",
+      "acknowledged_by": "mcp",
+      "cycle_ids": [
+        "CYCLE-000020",
+        "CYCLE-000021",
+        "CYCLE-000022"
+      ],
+      "escalation_id": "ESC-0005",
+      "finding_id": "F-022",
+      "opened_at": "2026-08-03T06:50:53.474750+00:00",
+      "reason": "unresolved across 3 audit cycles",
+      "resolution_note": "Both escalations are the SAME defect counted three times because the audit queue was running behind my fix rate, not three failures to fix. F-022/F-023 were raised at CYCLE-000020 (snapshot a01e54cf), fixed at bc98bda3 within the hour, then re-raised at CYCLE-000021 (snapshot 1cca3f64) and CYCLE-000022 (snapshot 54861ef2) \u2014 both queued BEFORE the fix existed, and each report itself states the fix commit is not an ancestor of the snapshot it audited. Fix content: q1 staging manifest superseded to SUBMITTED_AND_COMPLETED with v1 preserved verbatim and the q1==q0 hash identity explained by the zero-BFGS-step physics; canonical index gained the QX passivator-screen row; regressions [44]/[45] pin both with verified failing fixtures. Contained in the queued 735e7f00 snapshot. Operational note for the loop: I will keep one audit request in flight at a time from here on, so verdicts land on the tip rather than on superseded snapshots. Not claiming closure \u2014 the verdict is the auditor's.",
+      "status": "ACKNOWLEDGED"
+    },
+    {
+      "acknowledged_at": "2026-08-03T08:11:46.748455+00:00",
+      "acknowledged_by": "mcp",
+      "cycle_ids": [
+        "CYCLE-000020",
+        "CYCLE-000021",
+        "CYCLE-000022"
+      ],
+      "escalation_id": "ESC-0006",
+      "finding_id": "F-023",
+      "opened_at": "2026-08-03T06:50:53.540024+00:00",
+      "reason": "unresolved across 3 audit cycles",
+      "resolution_note": "Both escalations are the SAME defect counted three times because the audit queue was running behind my fix rate, not three failures to fix. F-022/F-023 were raised at CYCLE-000020 (snapshot a01e54cf), fixed at bc98bda3 within the hour, then re-raised at CYCLE-000021 (snapshot 1cca3f64) and CYCLE-000022 (snapshot 54861ef2) \u2014 both queued BEFORE the fix existed, and each report itself states the fix commit is not an ancestor of the snapshot it audited. Fix content: q1 staging manifest superseded to SUBMITTED_AND_COMPLETED with v1 preserved verbatim and the q1==q0 hash identity explained by the zero-BFGS-step physics; canonical index gained the QX passivator-screen row; regressions [44]/[45] pin both with verified failing fixtures. Contained in the queued 735e7f00 snapshot. Operational note for the loop: I will keep one audit request in flight at a time from here on, so verdicts land on the tip rather than on superseded snapshots. Not claiming closure \u2014 the verdict is the auditor's.",
+      "status": "ACKNOWLEDGED"
     }
   ]
 }

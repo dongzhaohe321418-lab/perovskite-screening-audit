@@ -1,0 +1,26 @@
+{
+  "audit_report_id": "CYCLE-000022:8571f7f781a7",
+  "cycle_id": "CYCLE-000022",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "This cycle audited 54861ef2 \u2014 queued before CYCLE-000020 raised this finding, so the fix cannot be an ancestor (the report notes exactly that). Fixed at bc98bda31b8aaf4836e38b815ed66f90ef341fd3 (dispositioned identically in CYCLE-000020/000021) and contained in the queued 735e7f00 snapshot. Fix content: staging manifest superseded to SUBMITTED_AND_COMPLETED, v1 preserved verbatim inside; the q1==q0 hash identity explained in-manifest (zero-BFGS-step physics + checksum dedup); regression [44] fails on BLOCKED-while-converged and on stale absent-claims.",
+      "finding_id": "F-022",
+      "fix_commit": "bc98bda31b8aaf4836e38b815ed66f90ef341fd3"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "This cycle audited 54861ef2 \u2014 queued before CYCLE-000020 raised this finding, so the fix cannot be an ancestor (the report notes exactly that). Fixed at bc98bda31b8aaf4836e38b815ed66f90ef341fd3 (dispositioned identically in CYCLE-000020/000021) and contained in the queued 735e7f00 snapshot. Fix content: QX row added to the canonical index with the same-phase conclusion, instrumental-artifact finding, P5/P3 dispositions, authorities, raw-data locators, and an explicit no-efficacy-claim scope; regression [45] enforces it.",
+      "finding_id": "F-023",
+      "fix_commit": "bc98bda31b8aaf4836e38b815ed66f90ef341fd3"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted, and this one is the most serious of the three because it is a truthfulness defect in the evidence layer itself: every green run emitted one false line. You are exactly right \u2014 expect() printed the violation-phrased msg after 'ok', so the receipt asserted AUDIT_CORRECTIONS_CYCLE1.md:101 was unmarked while the record is explicitly marked. Fixed as a CLASS at 7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88: (1) expect(cond, msg, ok_msg=None) prints ok_msg on the passing branch, with the reason in its docstring; (2) an AST sweep found 17 violation-shaped messages, of which 8 were genuine violation reports \u2014 all 8 now supply a truthful ok_msg (groups 41/42/43/44); (3) group [41]'s scan and receipt wording factored into _count_claim_hits/_count_receipt so both outcomes share one path; (4) your C-GUARD-003 exists as regression [46]: it EXECUTES [41]'s scanner against two committed fixtures (tests/fixtures/count_claim_{historical,unmarked}.md), requiring the marked case to yield a marker-asserting receipt and the unmarked case a violation-asserting one, plus a static AST sweep forbidding any violation-phrased expect() without ok_msg. Two fixture verifications pass: stripping an ok_msg fails [46] by line number; mismarking the unmarked fixture fails its scanner assertion. Both fixtures initially poisoned their own context (marker words in the titles fell inside [41]'s window, so both read as marked) \u2014 running them exposed that and the headers were rewritten. The receipt on the real record now reads 'count 36 != current 46 but IS marked historical/superseded'. 46 groups, two clean runs green.",
+      "finding_id": "F-024",
+      "fix_commit": "7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88"
+    }
+  ],
+  "report_sha256": "8571f7f781a71e7bde7b8b253b47371a0b53771df4253a72bb5581d387b5fc92",
+  "report_sha256_confirmed": true
+}
