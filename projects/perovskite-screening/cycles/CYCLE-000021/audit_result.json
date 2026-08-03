@@ -1,0 +1,61 @@
+{
+  "cycle_id": "CYCLE-000021",
+  "audited_commit": "1cca3f648c25af1fc22a98a11d4319fa488aa4eb",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-022",
+      "title": "q=+1 staging record conflicts with the current production-run provenance state",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "ehpc/inputs_stage2/neb_q1_production/staging_manifest.json:3-4 is an unmarked current record with submission_status BLOCKED_DO_NOT_SUBMIT and says its q=+1 source is absent; :20-24 says the entry never described a real staging operation and was never backed by a q1 input.",
+        "results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md:1-12 asserts BOTH LEGS CONVERGED, and :27-28 says q1/q1_initial_relaxed.extxyz and q1/q1_final_relaxed.extxyz close the input-source gap. The named initial endpoint exists at this commit and hashes to 7af20ebb7a069ea0ae3ca8cb3c3867aa3dc6be0a63338e4fb6644b9f0274a121.",
+        "The staging record and current production authority make incompatible current assertions about custody of the q=+1 input. The submitted F-022 fix commit bc98bda31b8aaf4836e38b815ed66f90ef341fd3 is not an ancestor of the audited commit.",
+        "reproduce: rg -n 'BLOCKED_DO_NOT_SUBMIT|does not describe a real staging|never backed by a real q1 input' ehpc/inputs_stage2/neb_q1_production/staging_manifest.json && rg -n 'BOTH LEGS CONVERGED|closes the F-003' results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md && test -f results/objective1/dft/charge_relaxed/q1/q1_initial_relaxed.extxyz && shasum -a 256 results/objective1/dft/charge_relaxed/q1/q1_initial_relaxed.extxyz",
+        "proposed_check: C-STATE-007 — resolve every current production-run authority to its staging manifest and named input paths; fail if an unmarked manifest says BLOCKED_DO_NOT_SUBMIT, never staged, or absent input while the authority says the run completed, or if a stated-absent path exists. Fixture: retain this q1 manifest with the present production status."
+      ]
+    },
+    {
+      "finding_id": "F-023",
+      "title": "Canonical index omits the live XRD passivator-screen conclusions",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-NAV-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:1-4 declares itself the one-row-per-question index of every current scientific conclusion. Its only XRD text at :99-102 is a generic independent-subproject pointer; it names no XRD question, conclusion, authority, or raw-data path.",
+        "xrd/PASSIVATOR_SCREEN.md:1-22 and :66-148 is an unmarked current six-film result: it records VALID/PROVISIONAL/NOT COMPARABLE dispositions and current conclusions including P5 ~10% PbI2 (3.8x control) and P3 below detection. Neither RESULTS_INDEX.md nor xrd/README.md names PASSIVATOR_SCREEN.md.",
+        "The live XRD conclusions are absent from the declared canonical index. The submitted F-023 fix commit bc98bda31b8aaf4836e38b815ed66f90ef341fd3 is not an ancestor of the audited commit.",
+        "reproduce: rg -n 'PASSIVATOR_SCREEN|P5|P3|Generations-0726|xrd/' RESULTS_INDEX.md xrd/README.md xrd/PASSIVATOR_SCREEN.md; sed -n '99,102p' RESULTS_INDEX.md; sed -n '1,22p;66,148p' xrd/PASSIVATOR_SCREEN.md",
+        "proposed_check: C-NAV-005 — require RESULTS_INDEX.md to contain one explicit current XRD/passivator row when an unmarked xrd/PASSIVATOR_SCREEN.md exists; the row must name that authority and raw/results paths. Fixture: an index containing only the present generic xrd/ pointer with PASSIVATOR_SCREEN.md retained must fail."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-019",
+      "verification_summary": "At 1cca3f648c25af1fc22a98a11d4319fa488aa4eb, RESULTS_INDEX.md asserts Q3 CLOSED/CITABLE; all three index-named Q3 authorities open with CLOSED/CITABLE banners; all remaining demotion-era predicates are explicitly historical/superseded; Q0 gate condition 3 records re-verification COMPLETE and cites Q3_CLOSURE_RECORD.md. An isolated-copy run of the 43-group regression suite and derive_q3.py both exited 0."
+    }
+  ],
+  "summary": "BLOCK: F-019 is independently verified closed, but F-022 and F-023 remain HIGH current-state/navigation defects and block publication claims.",
+  "coverage": {
+    "evidence_manifest_sha256": "c9b2f142ea19c50ace471b3b8130b36802eadbe2aa758de6618931c971bb7447",
+    "paths_examined": 54,
+    "method": "Enumerated all 482 tracked paths, then followed the canonical index to active authorities, manifests, raw datasets and derivation scripts; independently ran relevant tests and recomputations in an isolated copy.",
+    "not_examined": [
+      "Full contents of historical archive documents except their banner/navigation references",
+      "Rendered PDF/PNG assets and unrelated early exploratory raw outputs not named by current authorities"
+    ]
+  }
+}
