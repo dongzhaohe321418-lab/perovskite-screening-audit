@@ -23,7 +23,7 @@ what the gate permitted, and what each cycle cost. Generated; do not edit.
 
 - cycles finalized: 11
 - findings verified closed: 15
-- audit input tokens: 27,192,247
+- audit input tokens: 30,524,802
 
 ## Files
 
