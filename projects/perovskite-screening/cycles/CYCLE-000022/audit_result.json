@@ -1,0 +1,70 @@
+{
+  "cycle_id": "CYCLE-000022",
+  "audited_commit": "54861ef2b9fdbe90c81c991daf79e161f5da003f",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-022",
+      "title": "q=+1 staging record conflicts with the current production-run provenance state",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "The submitted repair commit bc98bda31b8aaf4836e38b815ed66f90ef341fd3 is not an ancestor of the audited commit, so this snapshot retains the prior staging state.",
+        "ehpc/inputs_stage2/neb_q1_production/staging_manifest.json:3-4 declares submission_status BLOCKED_DO_NOT_SUBMIT and prohibits submission because the q1 source is absent; :20-24 says no real q1 staging/input existed, without a historical or superseded marker.",
+        "results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md:1-12 asserts BOTH LEGS CONVERGED, while :27-28 says q1/q1_initial_relaxed.extxyz and q1/q1_final_relaxed.extxyz close the input-source gap. The two current authorities assert incompatible q=+1 custody states.",
+        "reproduce: if git merge-base --is-ancestor bc98bda31b8aaf4836e38b815ed66f90ef341fd3 HEAD; then echo fix-is-ancestor; else echo fix-not-ancestor; fi; rg -n 'BLOCKED_DO_NOT_SUBMIT|does not describe a real staging|never backed by a real q1 input|BOTH LEGS CONVERGED|closes the F-003' ehpc/inputs_stage2/neb_q1_production/staging_manifest.json results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md; test -f results/objective1/dft/charge_relaxed/q1/q1_initial_relaxed.extxyz && shasum -a 256 results/objective1/dft/charge_relaxed/q1/q1_initial_relaxed.extxyz",
+        "proposed_check: C-STATE-007 — resolve every current production authority to its staging manifest and input paths; fail if an unmarked manifest says BLOCKED_DO_NOT_SUBMIT, never staged, or absent input while the authority says the run completed, or if a stated-absent path exists. Fixture: retain this manifest with the present production status."
+      ]
+    },
+    {
+      "finding_id": "F-023",
+      "title": "Canonical index omits the live XRD passivator-screen conclusions",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-NAV-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "The submitted repair commit bc98bda31b8aaf4836e38b815ed66f90ef341fd3 is not an ancestor of the audited commit, so its proposed QX index row is absent from this snapshot.",
+        "RESULTS_INDEX.md:1-4 declares itself the one-row-per-question current-conclusion index. Its only XRD text at :101-102 is a generic independent-subproject pointer, with no XRD question, conclusion, authority, or raw-data locator.",
+        "xrd/PASSIVATOR_SCREEN.md:1-22 and :66-148 is a current six-film result with VALID/PROVISIONAL/NOT COMPARABLE dispositions, including P5 about 10% PbI2 (3.8x control) and P3 below detection. Neither RESULTS_INDEX.md nor xrd/README.md names PASSIVATOR_SCREEN.md.",
+        "reproduce: if git merge-base --is-ancestor bc98bda31b8aaf4836e38b815ed66f90ef341fd3 HEAD; then echo fix-is-ancestor; else echo fix-not-ancestor; fi; rg -n 'PASSIVATOR_SCREEN|P5|P3|Generations-0726|xrd/' RESULTS_INDEX.md xrd/README.md xrd/PASSIVATOR_SCREEN.md; sed -n '99,103p' RESULTS_INDEX.md",
+        "proposed_check: C-NAV-005 — require RESULTS_INDEX.md to contain one explicit current XRD/passivator row whenever an unmarked xrd/PASSIVATOR_SCREEN.md exists; the row must name that authority and its raw/results paths. Fixture: retain PASSIVATOR_SCREEN.md while stripping that row."
+      ]
+    },
+    {
+      "finding_id": "F-024",
+      "title": "Regression group 41 prints a false failure proposition as a passing result",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "evidence": [
+        "cite: §10 / R-GRD-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "AUDIT_CORRECTIONS_CYCLE1.md:98 explicitly marks the record HISTORICAL, and the group-41 predicate at scripts/20_test_checks.py:1152-1154 therefore passes. Its fixed message nevertheless says the count 'is not marked historical'.",
+        "scripts/20_test_checks.py:19-24 prints every successful expect() message after 'ok' without changing the failure-oriented message. Clean execution consequently emits 'ok ... count 36 != current 43 and is not marked historical', an assertion contradicted by the source record. The guard receipt is not truthfully derived from the condition it reports.",
+        "reproduce: python3 scripts/20_test_checks.py | sed -n '/\\[41\\]/,/\\[42\\]/p'; nl -ba AUDIT_CORRECTIONS_CYCLE1.md | sed -n '96,107p'; nl -ba scripts/20_test_checks.py | sed -n '19,25p;1129,1155p'",
+        "proposed_check: C-GUARD-003 — execute group 41 against a committed historical-count fixture and require its successful receipt to state that the mismatched count is historical/superseded; require an unmarked fixture to fail with the failure wording."
+      ]
+    }
+  ],
+  "summary": "BLOCK: F-022 and F-023 remain open because their submitted repair commit is not contained in the audited snapshot. F-024 is a non-blocking regression-receipt defect.",
+  "coverage": {
+    "evidence_manifest_sha256": "24bfb34dc48bb338c1a24e78c2166e74a915d75b0637cab603c9a3ac1503996b",
+    "paths_examined": 25,
+    "method": "Read canonical navigation and current authorities first, then traced each open finding to its named manifests/status files, ran the Q3 derivation and full regression suite in a clean detached copy, and inspected the implicated test source and correction record.",
+    "not_examined": [
+      "No exhaustive independent recomputation of every Objective 2 and XRD numeric result was performed; this cycle focused on the two still-open blockers, Q3 repair verification, and the regression receipt anomaly.",
+      "No remote scheduler, instrument, or uncommitted evidence was accessed."
+    ]
+  }
+}
