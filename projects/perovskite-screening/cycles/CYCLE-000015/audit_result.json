@@ -1,0 +1,35 @@
+{
+  "cycle_id": "CYCLE-000015",
+  "audited_commit": "c6372d99c5c3250d02b0308d517de9f1dee114fd",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-018",
+      "title": "Audit request hash does not identify the committed evidence manifest",
+      "severity": "CRITICAL",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 2 / R-EVD-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        ".audit/audit_request.json:3-4 names .audit/evidence_manifest.json and declares SHA-256 51d2d87450610115d4c543d2aed1cc039cd2fded9bb2fdad8a860acf71f81cc5.",
+        "The named committed file's raw-byte SHA-256 is 92f81c6a638f241529f6d906462c514a1c09bd41ae5f0bb5837f2206359ae814; its separately declared non-.audit tree_sha256 (609c9015c5948a9f16fa85da6e18d5f75c900857e5af0d6a24bcf8431903d158) recomputes, but is not the requested file digest.",
+        "reproduce: expected=$(python3 -c 'import json; print(json.load(open(\".audit/audit_request.json\"))[\"evidence_manifest_sha256\"])'); actual=$(shasum -a 256 .audit/evidence_manifest.json | awk '{print $1}'); printf 'declared=%s\\nactual=%s\\n' \"$expected\" \"$actual\"; test \"$expected\" = \"$actual\"",
+        "proposed_check: C-AUD-001 — parse .audit/audit_request.json, resolve evidence_manifest_path, hash that committed file's raw bytes, and require equality to evidence_manifest_sha256; a fixture replacing the field with 51d2d87450610115d4c543d2aed1cc039cd2fded9bb2fdad8a860acf71f81cc5 while the file hashes to 92f81c6a638f241529f6d906462c514a1c09bd41ae5f0bb5837f2206359ae814 must fail."
+      ]
+    }
+  ],
+  "summary": "BLOCK: the requested publish_claim lacks a valid file-level binding from the audit request to its named evidence manifest. F-017 remains independently verified closed at this snapshot.",
+  "coverage": {
+    "evidence_manifest_sha256": "51d2d87450610115d4c543d2aed1cc039cd2fded9bb2fdad8a860acf71f81cc5",
+    "paths_examined": 18,
+    "method": "Read the canonical index and Q2 authorities first, then independently traversed the audit request/manifest binding, production raw outputs and custody records, gate/regression implementation, and protocol dependencies in a clean detached clone.",
+    "not_examined": [
+      "No line-by-line independent review of every historical archive document.",
+      "No Q2 barrier extraction was performed or assessed because the requested publish_claim is blocked before extraction."
+    ]
+  }
+}
