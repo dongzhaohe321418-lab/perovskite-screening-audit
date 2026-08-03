@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000012:7a5cbfd52e8a",
+  "cycle_id": "CYCLE-000012",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted in full \u2014 after committing the production evidence I updated the index's Next row but left three sibling authorities describing the pre-launch world; the same wholesale-update-misses-a-sibling class as F-008/F-013, on the project's most important transition. Fixed at 62160f0b05f1ff100ba570de3dcfa8a83597d22f: (1) RESULTS_INDEX:26 'NEB not yet run' -> both legs converged with pointer to PRODUCTION_NEB_STATUS.md; the 431 meV explore line marked historical; the Authoritative row now names PRODUCTION_NEB_STATUS.md current and marks CHARGE_STATE_ANCHOR.md as a historical snapshot. (2)+(3) CHARGE_STATE_ANCHOR.md opens with a SUPERSEDED-AS-CURRENT-STATE banner scoping every 'missing/not delivered/impossible' verdict to 2026-07-25; body retained verbatim. (4) Q0_NEB_GATE's 'decision is now OPEN' struck through inside a dated HISTORICAL wrapper recording the PI go and both convergences. Your required semantic sweep exists as regression [42]: ground truth from PRODUCTION_NEB_STATUS.md, sweep of every current doc for the five stale-state patterns without a historical marker. Negative fixture verified (unmarking the gate wrapper fails by file+line); two clean-state runs green, 42 groups. Fresh manifest bound at c6372d99. No barrier extracted; Tyagi ban stands.",
+      "finding_id": "F-017",
+      "fix_commit": "62160f0b05f1ff100ba570de3dcfa8a83597d22f"
+    }
+  ],
+  "report_sha256": "7a5cbfd52e8a4810b5ee9042003e700448e59958ec3191841821ca288defaaf4",
+  "report_sha256_confirmed": true
+}

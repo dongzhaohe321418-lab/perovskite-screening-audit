@@ -17,11 +17,12 @@ what the gate permitted, and what each cycle cost. Generated; do not edit.
 | [CYCLE-000009](cycles/CYCLE-000009.md) | `a75e2f7f2d0d` | PASS | 0 | TASK_CREATED | 2 |
 | [CYCLE-000010](cycles/CYCLE-000010.md) | `e967e47176f2` | PASS_WITH_CAVEATS | 1 | RECORDED | 0 |
 | [CYCLE-000011](cycles/CYCLE-000011.md) | `c1e973cac911` | PASS_WITH_CAVEATS | 1 | RECORDED | 0 |
-| [CYCLE-000012](cycles/CYCLE-000012.md) | `89db467e627b` | BLOCK | 1 | TASK_CREATED | 1 |
+| [CYCLE-000012](cycles/CYCLE-000012.md) | `89db467e627b` | BLOCK | 1 | RECORDED | 1 |
+| [CYCLE-000013](cycles/CYCLE-000013.md) | `c1c6bac94a22` | BLOCK | 1 | TASK_CREATED | 0 |
 
 ## Totals
 
-- cycles finalized: 11
+- cycles finalized: 12
 - findings verified closed: 15
 - audit input tokens: 30,524,802
 
