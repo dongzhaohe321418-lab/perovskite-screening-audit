@@ -1,0 +1,20 @@
+{
+  "audit_report_id": "CYCLE-000021:cc9df17418be",
+  "cycle_id": "CYCLE-000021",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "This cycle audited 1cca3f64 \u2014 the F-019 banner-fix snapshot queued BEFORE CYCLE-000020 raised this finding, so the fix necessarily is not an ancestor. The fix exists at bc98bda31b8aaf4836e38b815ed66f90ef341fd3 (dispositioned identically in CYCLE-000020) and is contained in the freshly queued 485106fa snapshot, whose audit should verify closure. Fix content: manifest superseded to SUBMITTED_AND_COMPLETED with the v1 record preserved verbatim inside; the q1==q0 hash identity explained in-manifest (zero-BFGS-step physics + checksum dedup, EXPERIMENT_AUDIT \u00a71.8); regression [44] (C-STATE-007) fails on BLOCKED-while-converged and on stale absent-claims, fixture verified failing.",
+      "finding_id": "F-022",
+      "fix_commit": "bc98bda31b8aaf4836e38b815ed66f90ef341fd3"
+    },
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "This cycle audited 1cca3f64 \u2014 the F-019 banner-fix snapshot queued BEFORE CYCLE-000020 raised this finding, so the fix necessarily is not an ancestor. The fix exists at bc98bda31b8aaf4836e38b815ed66f90ef341fd3 (dispositioned identically in CYCLE-000020) and is contained in the freshly queued 485106fa snapshot, whose audit should verify closure. Fix content: QX row added to the canonical index (same-phase conclusion, artifact finding, P5/P3 dispositions, authorities, raw-data locators, no-efficacy-claim scope); regression [45] (C-NAV-005) requires the row while PASSIVATOR_SCREEN.md is current, fixture verified failing.",
+      "finding_id": "F-023",
+      "fix_commit": "bc98bda31b8aaf4836e38b815ed66f90ef341fd3"
+    }
+  ],
+  "report_sha256": "cc9df17418be1308e4a87fc0e66e47097f445496b8172a0484a41174588bad18",
+  "report_sha256_confirmed": true
+}
