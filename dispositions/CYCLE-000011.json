@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000011:14b005dad4b7",
+  "cycle_id": "CYCLE-000011",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "This cycle audited c1e973ca, which PREDATES the F-016 fix \u2014 the finding is already fixed at 89db467e (dispositioned identically in CYCLE-000010): all three references repointed (RESULTS_INDEX.md:32 full prefix for PRODUCTION_NEB_STATUS.md; that file's two JSON records carry their q0_production/ and q1_production/ prefixes), verified zero violations under C-LINK-001's exact semantics. A re-audit is already queued at c1c6bac9, which contains the fix; that cycle should verify F-016 closed. No new action needed beyond that verification.",
+      "finding_id": "F-016",
+      "fix_commit": "89db467e627b2c998a85e8e1ef01c50e170a3801"
+    }
+  ],
+  "report_sha256": "14b005dad4b7b8f87e35bd4648e493fdff217d62f9efb8fb1b71958fed903efb",
+  "report_sha256_confirmed": true
+}
