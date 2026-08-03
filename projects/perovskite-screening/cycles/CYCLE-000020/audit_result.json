@@ -1,0 +1,75 @@
+{
+  "cycle_id": "CYCLE-000020",
+  "audited_commit": "a01e54cff8137b9622ab045c4d5f2cf789beb268",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-019",
+      "title": "Q3 citability status remains unpropagated to current authorities and gate",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:38-44 declares Q3 STATUS: CITABLE, demotion CLOSED, and admissible condition-3 gate evidence; Q0_POLARON_EXCLUDED.md:1-9, Q0_RESOLVED.md:1-8, and P1_REFERENCE_AUDIT.md:1-8 still assert that Q3 is UNVERIFIED/NOT CITABLE or that citability awaits the next independent audit, without a historical/superseded marker.",
+        "Q0_NEB_GATE.md:10 and :73-75 simultaneously mark condition 3 PASS and state that independent re-verification is pending/owed before the demotion is lifted. The submitted F-019 propagation fix 1cca3f648c25af1fc22a98a11d4319fa488aa4eb is not an ancestor of the fixed commit.",
+        "The Q3 raw derivation itself succeeds at this snapshot; the defect is incompatible current status/provenance assertions, not a re-verdict of the raw result.",
+        "reproduce: rg -n 'STATUS: CITABLE|UNVERIFIED.?/?NOT CITABLE|Citability is restored only|Pending independent re-verification|independent re-verification is owed' RESULTS_INDEX.md results/objective1/dft/charge_relaxed/Q0_POLARON_EXCLUDED.md results/objective1/dft/charge_relaxed/Q0_RESOLVED.md results/objective1/dft/charge_relaxed/P1_REFERENCE_AUDIT.md results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md; git merge-base --is-ancestor 1cca3f648c25af1fc22a98a11d4319fa488aa4eb HEAD; printf 'fix_ancestor_rc=%s\\n' \"$?\"",
+        "proposed_check: C-STATE-006 — parse the canonical Q3 block, every authority path it declares, and Q0 gate condition 3; fail when current CITABLE/closed/PASS predicates coexist with UNVERIFIED, NOT-CITABLE, pending-reverification, or re-verification-owed text outside an explicit historical/superseded/retracted context. A fixture with this snapshot's index plus any authority banner or gate wording must fail; marking the retained wording historical must pass."
+      ]
+    },
+    {
+      "finding_id": "F-022",
+      "title": "q=+1 staging record conflicts with the current production-run provenance state",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "ehpc/inputs_stage2/neb_q1_production/staging_manifest.json:3 records submission_status BLOCKED_DO_NOT_SUBMIT; :24 says it was never a real staging operation and its q1 endpoint input never existed, without a historical/superseded marker.",
+        "PRODUCTION_NEB_STATUS.md:1-12 instead asserts BOTH LEGS CONVERGED and a production q=+1 run, while :27-28 says q1/q1_initial_relaxed.extxyz and q1/q1_final_relaxed.extxyz are now committed and close the F-003 input-source gap. The named q1 initial structure exists and hashes to the same 7af20e… value the staging record associates with q0.",
+        "These documents assert incompatible current states for the required q=+1 staging/input custody; this audit does not decide which account is correct.",
+        "reproduce: rg -n 'BLOCKED_DO_NOT_SUBMIT|not describe a real staging|never existed|BOTH LEGS CONVERGED|closes the F-003' ehpc/inputs_stage2/neb_q1_production/staging_manifest.json results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md; test -f results/objective1/dft/charge_relaxed/q1/q1_initial_relaxed.extxyz && shasum -a 256 results/objective1/dft/charge_relaxed/q1/q1_initial_relaxed.extxyz",
+        "proposed_check: C-STATE-007 — for every current production-run authority, resolve its named staging manifest and input paths; fail if an unmarked manifest says BLOCKED_DO_NOT_SUBMIT, never staged, or missing input while the authority asserts the run completed, or if a stated absent path exists in the audited tree. Fixture: retain this q1 manifest with the current production-status file."
+      ]
+    },
+    {
+      "finding_id": "F-023",
+      "title": "Canonical index omits the live XRD passivator-screen conclusions",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-NAV-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:1-4 declares itself the index of every scientific question and current answer. Its only XRD entry (:99-102) identifies xrd/ as an independent sub-project and points to xrd/README.md, with no question, conclusion, raw-data locator, or pointer to the six-film analysis.",
+        "xrd/PASSIVATOR_SCREEN.md:1-22 and :66-148 is an unmarked current six-film result with VALID/PROVISIONAL/NOT COMPARABLE dispositions and conclusions including P5 ~10% PbI2 (3.8x control) and P3 below detection. Neither RESULTS_INDEX.md nor xrd/README.md references PASSIVATOR_SCREEN.md or the P1-P5/Generations-0726 result.",
+        "The canonical index therefore does not carry this live conclusion or direct a reader to its authority, even though the tracked result is current rather than archived or superseded.",
+        "reproduce: rg -n 'PASSIVATOR_SCREEN|P5|P3|Generations-0726' RESULTS_INDEX.md xrd/README.md xrd/PASSIVATOR_SCREEN.md; sed -n '99,102p' RESULTS_INDEX.md; sed -n '1,22p;66,148p' xrd/PASSIVATOR_SCREEN.md",
+        "proposed_check: C-NAV-005 — require RESULTS_INDEX.md to contain one explicit current XRD/passivator row when an unmarked xrd/PASSIVATOR_SCREEN.md exists; the row must name that authority and raw/results paths. Fixture: an index containing only the present generic xrd/ README pointer with PASSIVATOR_SCREEN.md retained must fail."
+      ]
+    }
+  ],
+  "verified_closed_findings": [],
+  "summary": "BLOCK: prior F-019 remains open at this snapshot; F-022 and F-023 are new independent hard integrity findings.",
+  "coverage": {
+    "evidence_manifest_sha256": "c9b2f142ea19c50ace471b3b8130b36802eadbe2aa758de6618931c971bb7447",
+    "paths_examined": 482,
+    "method": "Enumerated all tracked paths, parsed every tracked JSON, integrity-tested every tracked gzip, then traversed current index/status/gate/authority, production manifests and raw outputs, Objective-2 ledger, XRD raw/results/code, and full-tree state/path scans selected by the canonical index and prior open finding.",
+    "not_examined": [
+      "Remote scheduler, cluster filesystem, and instrument state were unavailable and were not accessed.",
+      "Untracked files and evidence outside the fixed commit were not used."
+    ]
+  }
+}
