@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000016:8137e62089b9",
+  "cycle_id": "CYCLE-000016",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted. Root cause: the index's Q3 demotion outlived its own lifting condition \u2014 'until an audit cycle closes the Q3 findings' was met by the controller's verified-closed records (F-006 in CYCLE-000005; F-012/F-013 in CYCLE-000006; three later cycles re-ran derive_q3.py in isolated clones), but the demotion text was never updated, so the gate's condition-3 PASS and the index asserted different worlds. Fixed at 39fb71f740505d342f0d1b1ec232744f5a7f0e8c per your first option: (1) Q3_CLOSURE_RECORD.md is the closure artifact, citing WHERE each closure is recorded (verified_closed_findings in each cycle's audit_result.json) \u2014 the repo cites the controller, it does not self-lift; (2) index Q3 STATUS: CITABLE naming the record, demotion preserved as an explicitly historical note including why it went stale; (3) your C-STATE-004 exists as regression [43]: demoted+condition-3-PASS fails, and CITABLE requires the closure record naming all three findings \u2014 two fixtures verified failing (restored demotion; deleted closure record); (4) prior test [37] made state-conditional so its demotion sweep still enforces while demoted. 43 groups, two clean-state runs green. Fresh canonical-byte manifest bound at 27dd4bd2. No barrier extracted; publish_claim un-retried since its DENY.",
+      "finding_id": "F-019",
+      "fix_commit": "39fb71f740505d342f0d1b1ec232744f5a7f0e8c"
+    }
+  ],
+  "report_sha256": "8137e62089b9b0cb137891a7146f0d13604c397216ab6f717cfe65dbf1643d5b",
+  "report_sha256_confirmed": true
+}
