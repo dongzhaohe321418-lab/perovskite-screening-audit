@@ -31,31 +31,34 @@
       "status": "ACKNOWLEDGED"
     },
     {
-      "escalation_id": "ESC-0003",
-      "finding_id": "F-009",
-      "reason": "unresolved across 3 audit cycles",
+      "acknowledged_at": "2026-07-31T05:14:17.551796+00:00",
+      "acknowledged_by": "principal-investigator",
       "cycle_ids": [
         "CYCLE-000002",
         "CYCLE-000004",
         "CYCLE-000005"
       ],
+      "escalation_id": "ESC-0003",
+      "finding_id": "F-009",
       "opened_at": "2026-07-31T05:05:45.750345+00:00",
-      "status": "ACKNOWLEDGED",
-      "acknowledged_at": "2026-07-31T05:14:17.551796+00:00",
-      "acknowledged_by": "principal-investigator",
-      "resolution_note": "PI acknowledged 2026-07-31. F-009 (Tier-0 test entrypoint) was addressed in the fix commits audited by CYCLE-000004/000005; the auditor did not restate it, so it never received an explicit closure. Released to let the loop continue; if it is genuinely unresolved a later audit will raise it again."
+      "reason": "unresolved across 3 audit cycles",
+      "resolution_note": "PI acknowledged 2026-07-31. F-009 (Tier-0 test entrypoint) was addressed in the fix commits audited by CYCLE-000004/000005; the auditor did not restate it, so it never received an explicit closure. Released to let the loop continue; if it is genuinely unresolved a later audit will raise it again.",
+      "status": "ACKNOWLEDGED"
     },
     {
-      "escalation_id": "ESC-0004",
-      "finding_id": "F-019",
-      "reason": "unresolved across 3 audit cycles",
+      "acknowledged_at": "2026-08-03T04:59:51.278970+00:00",
+      "acknowledged_by": "mcp",
       "cycle_ids": [
         "CYCLE-000016",
         "CYCLE-000017",
         "CYCLE-000018"
       ],
+      "escalation_id": "ESC-0004",
+      "finding_id": "F-019",
       "opened_at": "2026-08-03T04:04:46.651916+00:00",
-      "status": "OPEN"
+      "reason": "unresolved across 3 audit cycles",
+      "resolution_note": "F-019's three raises are one defect chased across stale snapshots: CYCLE-000016 raised it at a9c5f0f5; the fix 39fb71f7 went to CYCLE-000017's snapshot, which found a real RESIDUAL - two surviving NOT-CITABLE sentences deeper in the same block - fixed at a6bddfe8 with the hardened one-state regression [43] and the auditor's exact mixed-state fixture verified failing; CYCLE-000018 audited 27dd4bd2, a pre-fix snapshot from an earlier queued request, and correctly noted the fix was not an ancestor. The complete fix is contained in a01e54cf (current HEAD), whose audit request is queued; that cycle should render the closure verdict. Not claiming closure - that is the auditor's to give.",
+      "status": "ACKNOWLEDGED"
     }
   ]
 }
