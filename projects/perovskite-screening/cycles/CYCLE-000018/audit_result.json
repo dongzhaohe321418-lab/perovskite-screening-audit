@@ -1,0 +1,68 @@
+{
+  "cycle_id": "CYCLE-000018",
+  "audited_commit": "27dd4bd297ac4019928bb9334584643928d7b6d2",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-019",
+      "title": "Q3 gate-evidence citability remains internally contradictory at the fixed commit",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "The submitted fix commit a6bddfe82224c6b952257ea4a321abb6ff6879d7 is not an ancestor of 27dd4bd297ac4019928bb9334584643928d7b6d2; this fixed snapshot retains the pre-fix RESULTS_INDEX.md and group-[43] implementation.",
+        "RESULTS_INDEX.md:38-44 asserts current STATUS: CITABLE and restores Q3 as admissible Q0 condition-3 evidence, while lines 59-60 say the row stays NOT CITABLE and lines 70-73 repeat Status stays NOT CITABLE. Neither latter assertion is marked HISTORICAL, SUPERSEDED, or RETRACTED.",
+        "Q0_NEB_GATE.md:6-12 continues to mark condition 3 PASS; the current index and index-named Q3 authority banners therefore do not assert one status for the same gate evidence.",
+        "reproduce: if git merge-base --is-ancestor a6bddfe82224c6b952257ea4a321abb6ff6879d7 HEAD; then exit 1; else echo submitted-fix-not-ancestor; fi; nl -ba RESULTS_INDEX.md | sed -n '38,44p;59,60p;70,73p'; nl -ba results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md | sed -n '6,12p'",
+        "proposed_check: C-STATE-004 amendment — parse every status predicate in the bounded canonical Q3 block and every index-named Q3 authority; classify only explicitly marked historical/superseded/retracted predicates as non-current, and fail if a current NOT-CITABLE predicate coexists with STATUS: CITABLE or condition-3 PASS. A fixture retaining this snapshot's lines 38-44 and 59-60 must fail."
+      ]
+    },
+    {
+      "finding_id": "F-020",
+      "title": "Q3 one-state regression masks the current contradictory state at the fixed commit",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: §10 / R-GRD-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "scripts/20_test_checks.py:1188-1195 sets _q3_banned to a NOT-CITABLE match AND not _q3_citable. The current Q3 block contains both predicates, so the implementation assigns citable=True, not_citable=True, banned=False and does not fail the advertised one-state assertion.",
+        "An isolated detached-copy run of python3 scripts/20_test_checks.py exited 0 and printed ALL TESTS PASSED; group [43] reported the contradiction check OK despite the live mixed state established in F-019.",
+        "reproduce: python3 scripts/20_test_checks.py && sed -n '1182,1202p' scripts/20_test_checks.py && sed -n '38,73p' RESULTS_INDEX.md",
+        "proposed_check: C-GUARD-003 — execute the Q3 status regression against a committed fixture containing both current STATUS: CITABLE and current NOT CITABLE predicates plus a condition-3 PASS row; require nonzero exit, while a fixture where the NOT-CITABLE text is explicitly HISTORICAL passes."
+      ]
+    },
+    {
+      "finding_id": "F-021",
+      "title": "One current Q3 derivation locator is unresolved",
+      "severity": "LOW",
+      "status": "OPEN",
+      "evidence": [
+        "cite: Gate 11 / R-EVD-002",
+        "source: DETERMINISTIC",
+        "finding_class: SOFT",
+        "check_id: C-LINK-001",
+        "Tier-0 reports RESULTS_INDEX.md:42 references q3_raw/derive_q3.py, which resolves to neither an index-relative nor repository-root-relative tracked path. The committed script is results/objective1/dft/charge_relaxed/q3_raw/derive_q3.py.",
+        "reproduce: test -e q3_raw/derive_q3.py && echo exists || echo absent"
+      ]
+    }
+  ],
+  "summary": "BLOCK: F-019 and F-020 remain open because the submitted correction is not an ancestor of the fixed commit and this snapshot still contains a live Q3 citability contradiction that its regression masks. F-021 remains an independent non-blocking Tier-0 link failure. No prior open finding was verified closed.",
+  "coverage": {
+    "evidence_manifest_sha256": "2989dd0d6cb4174c061781f4778f4991fc91b33e99a8bbcccb886692d4216624",
+    "paths_examined": 482,
+    "method": "Enumerated the complete tracked tree, then read the canonical index, all current Q1/Q2/Q3/XRD authorities and gates, relevant raw manifests/data and derivation scripts; independently executed the regression suite and Q3/XRD recomputations in an isolated detached copy.",
+    "not_examined": [
+      "Bulk historical, proposal, literature-survey, figure/PDF, and raw compressed artifacts outside the current authority chains were not individually line-read; their tree/path/hash integrity was covered by Tier-0 PASS checks.",
+      "No remote scheduler, cluster, instrument, or uncommitted external state was available or treated as evidence."
+    ]
+  }
+}
