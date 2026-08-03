@@ -1,0 +1,38 @@
+{
+  "cycle_id": "CYCLE-000013",
+  "audited_commit": "c1c6bac94a22f38433a1abb8197839581b69e848",
+  "decision": "BLOCK",
+  "summary": "F-017 remains open: this fixed snapshot predates the submitted repair and retains incompatible current Q2 production-CI-NEB states across its authority documents.",
+  "findings": [
+    {
+      "finding_id": "F-017",
+      "title": "Current Q2 authority documents assert incompatible production CI-NEB states",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "finding_class: HARD",
+        "source: JUDGMENT",
+        "The submitted F-017 fix commit 62160f0b05f1ff100ba570de3dcfa8a83597d22f is not an ancestor of c1c6bac94a22f38433a1abb8197839581b69e848; the fixed snapshot retains the pre-fix authority text.",
+        "RESULTS_INDEX.md:26 says 'NEB not yet run', while RESULTS_INDEX.md:32 says the PI-authorized q=0+q=+1 production pair ran and both legs converged.",
+        "The index names results/objective1/dft/charge_relaxed/CHARGE_STATE_ANCHOR.md as authoritative at RESULTS_INDEX.md:28-29, but that file says at :4 and :15-16 that a required leg is missing, q=0 is not delivered, and comparison is impossible. It has no current-state supersession banner. results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md:112 retains an unmarked pre-submission decision.",
+        "In contrast, results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md:1 says BOTH LEGS CONVERGED. Independent decompression of q0_production/q0_neb.out.gz and q1_production/q1_neb.out.gz found 'neb: convergence achieved' at iterations 36 and 37 respectively, each followed by 'JOB DONE.'",
+        "reproduce: rg -n 'NEB not yet run|both legs converged' RESULTS_INDEX.md && rg -n 'One of the two required legs is missing|not delivered|comparison \\| \\*\\*impossible' results/objective1/dft/charge_relaxed/CHARGE_STATE_ANCHOR.md && rg -n 'BOTH LEGS CONVERGED' results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md && rg -n 'submission decision is now OPEN' results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md && gzip -cd results/objective1/dft/charge_relaxed/q0_production/q0_neb.out.gz | rg 'neb: convergence achieved|JOB DONE' && gzip -cd results/objective1/dft/charge_relaxed/q1_production/q1_neb.out.gz | rg 'neb: convergence achieved|JOB DONE'",
+        "proposed_check: C-STATE-003 — discover every Q2 authority named by RESULTS_INDEX.md and require production-NEB state predicates (not-run/missing/pre-launch versus ran/converged) to have one normalized current state or an explicit HISTORICAL/SUPERSEDED marker; include a fixture retaining the present index/anchor/gate text and require it to fail."
+      ]
+    }
+  ],
+  "verified_closed_findings": [],
+  "coverage": {
+    "evidence_manifest_sha256": "b186cda7d3d8569ed0832f901f039a85cd4333b8af6813592d7e7b993a09deab",
+    "paths_examined": 9,
+    "method": "Following the required authority-first order, inspected the Q2 index, named authority documents, governing protocol/gate, audit record, and both committed production raw outputs through git objects at the fixed commit; then checked the submitted-fix commit ancestry.",
+    "not_examined": [
+      "Scientific-source paths outside the nine Q2 authority/raw paths were not independently re-run in this retry-focused audit.",
+      "No remote scheduler, cluster, or instrument state was accessible or inspected."
+    ]
+  }
+}
