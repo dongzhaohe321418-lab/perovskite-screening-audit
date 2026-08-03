@@ -1,0 +1,45 @@
+{
+  "cycle_id": "CYCLE-000023",
+  "audited_commit": "bc98bda31b8aaf4836e38b815ed66f90ef341fd3",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-024",
+      "title": "Regression guard receipts state failure propositions after passing",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: §10 / R-GRD-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "scripts/20_test_checks.py:19-24 prints the same failure-oriented msg after both a failing and a passing predicate; no success-branch wording exists at this commit.",
+        "AUDIT_CORRECTIONS_CYCLE1.md:98-107 explicitly marks the count record historical, yet a clean-copy run prints `ok AUDIT_CORRECTIONS_CYCLE1.md:101 count 36 != current 45 and is not marked historical` in group 41. Group 44 similarly prints `ok ... current entry missing on disk` after each successful path-existence predicate.",
+        "The submitted F-024 repair commit 7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88 is not an ancestor of the audited commit, so this snapshot retains the false-receipt implementation.",
+        "reproduce: python3 scripts/20_test_checks.py | sed -n '/\\[41\\]/,/\\[42\\]/p;/\\[44\\]/,/\\[45\\]/p'; nl -ba scripts/20_test_checks.py | sed -n '19,25p;1129,1155p;1247,1268p'; nl -ba AUDIT_CORRECTIONS_CYCLE1.md | sed -n '96,107p'",
+        "proposed_check: C-GUARD-003 — execute committed accepted and rejected fixtures for the count and staging receipt scanners; require accepted fixtures to emit marker/assertion-positive text and rejected fixtures to emit the violation text, and reject violation-shaped expect() calls without an explicit success-branch message. Fixtures: one explicitly historical count record, one unmarked count record, and staging manifests with present versus absent current inputs."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-022",
+      "verification_summary": "At bc98bda31b8aaf4836e38b815ed66f90ef341fd3, the current q=+1 manifest is SUBMITTED_AND_COMPLETED. Its four current local_source paths exist; independently recomputed raw-byte SHA-256 values match the manifest, and the former BLOCKED_DO_NOT_SUBMIT record is explicitly historical/superseded."
+    },
+    {
+      "finding_id": "F-023",
+      "verification_summary": "RESULTS_INDEX.md:104-117 supplies a current QX row naming PASSIVATOR_SCREEN.md/PASSIVATOR_SCREEN_CN.md, xrd/data/, xrd/results/summary_metrics.csv, and xrd/analysis/, with the current six-film conclusion and no-efficacy-claim scope."
+    }
+  ],
+  "summary": "BLOCK: F-022 and F-023 are independently verified closed, but F-024 remains a HIGH blocking guard-integrity defect because green receipts assert failure propositions after accepted predicates.",
+  "coverage": {
+    "evidence_manifest_sha256": "24bfb34dc48bb338c1a24e78c2166e74a915d75b0637cab603c9a3ac1503996b",
+    "paths_examined": 18,
+    "method": "Traversed the re-audited findings from current canonical index and staging authorities into their manifests, current source files, regression implementation, correction record, and an isolated fixed-commit test run.",
+    "not_examined": [
+      "Unrelated legacy calculation, experiment, archive, and binary-figure artifacts were not independently recomputed in this retry; Tier-0 provides its stated tree-wide deterministic coverage."
+    ]
+  }
+}
