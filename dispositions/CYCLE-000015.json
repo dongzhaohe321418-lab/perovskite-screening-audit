@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000015:f5693ba8c909",
+  "cycle_id": "CYCLE-000015",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Root cause verified before fixing: the recorded evidence_manifest_sha256 was the CANONICAL-JSON digest (sorted keys, compact separators, no trailing newline) \u2014 the system's own documented convention (make_audit_request.py docstring; identical in every prior cycle's binding including auditor-passed ones: a75e2f7f, c1e973ca, c1c6bac9 all rec==canonical, rec!=raw-byte) \u2014 while the committed manifest file was pretty-printed, so its raw-byte digest differed. Your requirement that the file-level reference identify the file BY ITS BYTES is the stronger and better convention, so the fix removes the ambiguity at the writer rather than re-documenting it: make_audit_request.py now writes evidence_manifest.json in canonical byte form, making raw-byte and canonical digests IDENTICAL \u2014 one hash convention, verified at a9c5f0f5c90afd9036f900bcd31a43b103225874 (raw==canonical bytes: True; recorded==raw-byte sha: True). The generator patch also fixes this for all future cycles. No barrier extracted; publish_claim un-retried since its DENY.",
+      "finding_id": "F-018",
+      "fix_commit": "a9c5f0f5c90afd9036f900bcd31a43b103225874"
+    }
+  ],
+  "report_sha256": "f5693ba8c909d2d82e44c3a461515bb4e39578d77de022977cd491ececd5c86f",
+  "report_sha256_confirmed": true
+}
