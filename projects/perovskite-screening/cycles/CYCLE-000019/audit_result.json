@@ -1,0 +1,46 @@
+{
+  "cycle_id": "CYCLE-000019",
+  "audited_commit": "a6bddfe82224c6b952257ea4a321abb6ff6879d7",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-019",
+      "title": "Q3 citability status is not propagated to its current authority documents",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-STA-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:38-44 and :73-77 assert current STATUS: CITABLE, that the Q3 demotion is closed, and that no Q3 item remains open; Q3 is restored as admissible Q0 condition-3 gate evidence.",
+        "The current index-named Q3 authorities instead retain unmarked contrary status assertions: Q0_POLARON_EXCLUDED.md:1-9 says Q3 is UNVERIFIED/NOT CITABLE and citability awaits the next audit; Q0_RESOLVED.md:1-8 and P1_REFERENCE_AUDIT.md:1-8 say RESULTS_INDEX marks Q3 UNVERIFIED / NOT CITABLE and citability awaits independent re-verification.",
+        "Q0_NEB_GATE.md:10 and :74-75 still says condition-3 re-verification is pending/owed before the demotion is lifted, while its current condition-3 row is PASS. These current assertions are not marked HISTORICAL, SUPERSEDED, or RETRACTED.",
+        "reproduce: rg -n 'STATUS: CITABLE|demotion CLOSED|closure is complete' RESULTS_INDEX.md && rg -n 'UNVERIFIED.?/?NOT CITABLE|Citability is restored only|provisionally recomputable' results/objective1/dft/charge_relaxed/Q0_POLARON_EXCLUDED.md results/objective1/dft/charge_relaxed/Q0_RESOLVED.md results/objective1/dft/charge_relaxed/P1_REFERENCE_AUDIT.md && rg -n 'Pending independent re-verification|independent re-verification is owed' results/objective1/dft/charge_relaxed/Q0_NEB_GATE.md",
+        "proposed_check: C-STATE-005 — parse the canonical Q3 block, discover every authority it names, and inspect Q0 gate condition-3 provenance; fail if current CITABLE/closure predicates coexist with an unmarked UNVERIFIED, NOT-CITABLE, pending-reverification, or re-verification-owed predicate. A fixture retaining the current index CITABLE row and any one of the present authority banners must fail; the same text marked HISTORICAL must pass."
+      ]
+    }
+  ],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-020",
+      "verification_summary": "In an isolated clean copy, scripts/20_test_checks.py passed. After inserting one unmarked current NOT CITABLE Q3 assertion into an audit-only fixture while retaining STATUS: CITABLE, group [43] failed with exit 1 and identified the live-ban line; this independently verifies the submitted index-level guard repair."
+    },
+    {
+      "finding_id": "F-021",
+      "verification_summary": "RESULTS_INDEX.md now names results/objective1/dft/charge_relaxed/q3_raw/derive_q3.py at line 42, which exists at the fixed commit; Tier-0 C-LINK-001 also reports zero unresolved path-shaped references."
+    }
+  ],
+  "summary": "BLOCK: F-019 remains open because the canonical Q3 CITABLE state conflicts with unmarked NOT-CITABLE/pending-reverification assertions in current named authority documents and the Q0 gate. F-020 and F-021 are independently verified closed.",
+  "coverage": {
+    "evidence_manifest_sha256": "2989dd0d6cb4174c061781f4778f4991fc91b33e99a8bbcccb886692d4216624",
+    "paths_examined": 27,
+    "method": "Followed README to RESULTS_INDEX current-question rows, then read the linked Q1/Q2/Q3 authority, gate, raw-record, manifest, and regression paths; independently executed selected derivations and a negative regression fixture in isolated audit copies.",
+    "not_examined": [
+      "No independent line-by-line recomputation was performed for unchanged historical/archive, literature/PDF, or all XRD claims; Tier-0 covered tracked-tree structural checks and the XRD regression group was executed in the isolated suite.",
+      "No remote scheduler, cluster, instrument, or uncommitted evidence was accessed."
+    ]
+  }
+}
