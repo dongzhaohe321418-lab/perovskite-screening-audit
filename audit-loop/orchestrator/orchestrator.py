@@ -52,6 +52,13 @@ def sh(args: list[str], cwd: Path | None = None, check: bool = True,
     )
 
 
+class CodexLaunchError(RuntimeError):
+    """Codex could not run to completion (crash, missing interpreter, timeout).
+    Distinct from producing bad artifacts: an infrastructure failure should
+    retry on a later pass, not archive the event as permanently failed and
+    strand the cycle at CODEX_TASK_CREATED forever."""
+
+
 class Orchestrator:
     def __init__(self, config_path: Path, simulate_codex: bool = False):
         self.config_path = config_path
@@ -208,6 +215,24 @@ class Orchestrator:
                     continue
                 try:
                     deferred = self.handle_event(event)
+                except CodexLaunchError as exc:
+                    # Infrastructure failure, not a bad audit: keep the event and
+                    # retry, up to a bound, so a transient crash (e.g. a missing
+                    # interpreter on PATH) does not permanently strand the cycle.
+                    tries = int(event.get("codex_launch_tries", 0)) + 1
+                    cap = int(self.cfg["codex"].get("launch_retries", 6))
+                    if tries >= cap:
+                        log(f"event {event_path.name}: codex could not launch after "
+                            f"{tries} tries; giving up: {exc}")
+                        self.notify("Audit Loop error",
+                                    f"{event_path.name}: codex could not launch after {tries} tries")
+                        self._archive_event(event_path, suffix=".failed")
+                    else:
+                        log(f"event {event_path.name}: codex launch failed "
+                            f"(try {tries}/{cap}); will retry: {exc}")
+                        event["codex_launch_tries"] = tries
+                        event_path.write_text(json.dumps(event), encoding="utf-8")
+                    continue
                 except Exception as exc:
                     log(f"event {event_path.name} failed: {type(exc).__name__}: {exc}")
                     self.notify("Audit Loop error", f"{event_path.name}: {exc}")
@@ -898,7 +923,8 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
             result.stdout[-200000:] + "\n--- STDERR ---\n" + result.stderr[-50000:],
             encoding="utf-8")
         if result.returncode != 0:
-            raise RuntimeError(f"codex exec exited {result.returncode}; see codex_run_{attempt}.log")
+            raise CodexLaunchError(
+                f"codex exec exited {result.returncode}; see codex_run_{attempt}.log")
 
     def _simulate_codex(self, cycle_id: str, sha: str, cycle_dir: Path) -> None:
         out_dir = cycle_dir / "out"

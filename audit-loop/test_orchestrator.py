@@ -208,3 +208,48 @@ def test_a_cycle_with_findings_is_still_queued(tmp_path):
     orch._emit_pending_review("CYCLE-000009")
 
     assert (orch.pending_dir / "CYCLE-000009.json").exists()
+
+
+def test_codex_launch_failure_is_retryable_not_permanently_failed(tmp_path, monkeypatch):
+    """A codex crash must not archive the event as permanently failed.
+
+    Three cycles stranded at CODEX_TASK_CREATED with empty out/ because node was
+    off cron's PATH: codex exited non-zero, the RuntimeError was archived as
+    '.failed', and the event never retried. An infrastructure crash should keep
+    the event and retry up to a cap.
+    """
+    from orchestrator import CodexLaunchError
+    # A launch failure surfaces as CodexLaunchError, which the loop keeps + retries.
+    assert issubclass(CodexLaunchError, RuntimeError)
+
+    orch = make(tmp_path, {})
+    orch.spool.mkdir(parents=True, exist_ok=True)
+    evt = orch.spool / "evt-x.json"
+    evt.write_text(json.dumps({"type": "science_commit", "sha": "a" * 40,
+                               "source": "test"}))
+
+    monkeypatch.setattr(orch, "handle_event",
+                        lambda e: (_ for _ in ()).throw(CodexLaunchError("node not found")))
+    monkeypatch.setattr(orch, "scan_escalations", lambda: None)
+    orch.run_pass()
+
+    # Event still queued for retry, now carrying a try counter — not archived.
+    assert evt.exists(), "codex crash archived the event instead of keeping it for retry"
+    assert json.loads(evt.read_text())["codex_launch_tries"] == 1
+
+
+def test_codex_launch_failure_gives_up_at_the_cap(tmp_path, monkeypatch):
+    from orchestrator import CodexLaunchError
+    orch = make(tmp_path, {})
+    orch.cfg["codex"]["launch_retries"] = 2
+    orch.spool.mkdir(parents=True, exist_ok=True)
+    evt = orch.spool / "evt-y.json"
+    evt.write_text(json.dumps({"type": "science_commit", "sha": "b" * 40,
+                               "codex_launch_tries": 1}))
+    monkeypatch.setattr(orch, "handle_event",
+                        lambda e: (_ for _ in ()).throw(CodexLaunchError("still broken")))
+    monkeypatch.setattr(orch, "scan_escalations", lambda: None)
+    orch.run_pass()
+    # The original event is archived as .failed, not left for another retry.
+    assert not evt.exists(), "should have archived the event at the cap"
+    assert (orch.spool / "processed" / "evt-y.json.failed").exists()
