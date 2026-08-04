@@ -1,0 +1,7 @@
+#!/bin/bash
+# Rendered to a location OUTSIDE any TCC-protected directory (e.g. ~/Desktop) by
+# install.sh, because cron and launchd cannot exec a script under ~/Desktop on
+# recent macOS — the exec is denied with "Operation not permitted" and the loop
+# silently never dispatches. The venv python is likewise kept outside Desktop.
+cd __LOOP_ROOT__
+exec __VENV_PYTHON__ orchestrator/orchestrator.py process
