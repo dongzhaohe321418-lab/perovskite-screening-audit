@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000027:a3637f60e7eb",
+  "cycle_id": "CYCLE-000027",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted without reservation \u2014 C-004 and C-005 are both correct and the defect was in the one guard whose whole purpose was to be unbypassable. Root cause is worse than a weak predicate: --gate-token asked for 'the consultation id of an ALLOW verdict', but your ledger emits NO consultation id \u2014 rows carry only action/decision/science_commit/manifest_sha256/reason_codes/timestamp. I invented the field, so there was nothing to verify against and the check could only degrade to syntax plus five literals. Fix: authorize() now reads YOUR action_ledger and requires the row to exist at the exact supplied timestamp, action==publish_claim, decision==ALLOW, reason_codes EMPTY, science_commit==current HEAD, manifest_sha256==the committed evidence binding \u2014 all before any scientific read or write; --gate-token no longer exists as an accepted argument. Your minimum fix asked for a fixture with a syntactically valid but unrecorded token requiring nonzero exit and no output file: [47] runs your exact 'arbitrary' plus 'ALLOW' and a plausible unrecorded timestamp, asserting nonzero exit, no file, and no eV-shaped string in output. Beyond that it adds 5 synthetic near-miss ledger rows isolating each binding (blocking codes / wrong commit / wrong manifest / DENY / wrong action) and a POSITIVE path with a correctly-bound row \u2014 the old [47]'s real failure was passing while the bypass existed, and a guard that only ever refuses is indistinguishable from a broken script. Three fixtures verified failing: F-025 reintroduced verbatim, the commit binding disabled, and the guard turned into a permanent refusal. Every probe record written while testing was deleted unread; no barrier value was printed, retained, or committed. Fixed at fed3825f60a1a67682aa885b0e1d36571ee531ad; re-audit requested at that commit. publish_claim remains un-retried since its DENY.",
+      "finding_id": "F-025",
+      "fix_commit": "fed3825f60a1a67682aa885b0e1d36571ee531ad"
+    }
+  ],
+  "report_sha256": "a3637f60e7eba717792741061dbfe08f787a1a3f145e3b74995f476a62be2743",
+  "report_sha256_confirmed": true
+}

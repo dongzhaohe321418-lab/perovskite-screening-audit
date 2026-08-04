@@ -32,7 +32,8 @@ what the gate permitted, and what each cycle cost. Generated; do not edit.
 | [CYCLE-000024](cycles/CYCLE-000024.md) | `485106fa144c` | BLOCK | 1 | RECORDED | 0 |
 | [CYCLE-000025](cycles/CYCLE-000025.md) | `7a4f3b0e2fcd` | PASS | 0 | TASK_CREATED | 1 |
 | [CYCLE-000026](cycles/CYCLE-000026.md) | `735e7f008da7` | PASS | 0 | TASK_CREATED | 0 |
-| [CYCLE-000027](cycles/CYCLE-000027.md) | `ad8757317e6a` | BLOCK | 1 | TASK_CREATED | 0 |
+| [CYCLE-000027](cycles/CYCLE-000027.md) | `ad8757317e6a` | BLOCK | 1 | RECORDED | 0 |
+| [CYCLE-000028](cycles/CYCLE-000028.md) | `dbd48cc4771b` | CODEX_TASK_CREATED | 0 | NOT_STARTED | 0 |
 
 ## Totals
 
