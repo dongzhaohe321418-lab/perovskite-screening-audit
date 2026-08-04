@@ -253,6 +253,32 @@ a future session that trusts the error message would conclude the loop is unusab
 
 ---
 
+
+### Addendum (operator, 2026-08-04): the real root cause was TCC, not a missing agent
+
+The executor's diagnosis — no launchd agent installed — was correct but incomplete. Installing
+one would not have fixed it. When the loop was moved to a cron trigger instead, cron fired every
+5 minutes and still dispatched nothing: `cron.log` filled with
+
+    tick.sh: Operation not permitted
+
+The trigger script lived under `~/Desktop`, a macOS TCC-protected location, and neither cron nor
+launchd is granted access to it — the exec is denied before the script even starts. This is the
+same wall behind the executor's separate report that `request_audit` via MCP returns `Operation
+not permitted`: the MCP server's interpreter path also resolves under Desktop.
+
+**Fix (operator):** the trigger and its interpreter were moved outside every protected directory
+— `/opt/homebrew/var/audit-loop-bin/tick.sh` running
+`/opt/homebrew/var/audit-loop-venv/bin/python` — and cron points there. Verified two ways: a
+throwaway cron probe under `/opt` executed and wrote its result, and the loop resumed dispatching
+on the next tick. The orchestrator still reads Desktop files fine; only the *scheduler's* exec of
+a Desktop script was blocked. `install.sh` renders `tick.sh` to a non-protected path for this
+reason, recorded in `tick.sh.template`.
+
+**Why it looked like a missing agent.** With the agent unloaded *and* the path TCC-blocked, every
+symptom pointed at absence rather than denial — the more visible of two overlapping faults masked
+the load-bearing one. The lesson matching this file's own theme: an honest "not running" does not
+tell you whether the scheduler is absent or forbidden, and those need different fixes.
 ## Open structural gap
 
 **The loop audits the repository. Nothing audits the executor's report about the
