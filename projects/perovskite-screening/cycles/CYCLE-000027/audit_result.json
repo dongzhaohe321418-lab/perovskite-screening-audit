@@ -1,0 +1,38 @@
+{
+  "cycle_id": "CYCLE-000027",
+  "audited_commit": "ad8757317e6a1b6aaa31d640e837bc64da2c7717",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-025",
+      "title": "Barrier extractor accepts an unrecorded gate token as publication authorization",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: Gate 11 / R-PRO-002",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "RESULTS_INDEX.md:34 and results/objective1/dft/charge_relaxed/PRODUCTION_NEB_STATUS.md:30-34 require an explicit check_action ALLOW before Q2 barrier extraction/publication.",
+        "scripts/27_extract_barriers.py:91-95 validates only a token's format and five blacklist literals; it never resolves a consultation record or verifies ALLOW, commit, or action binding.",
+        "In an isolated clone of the fixed commit, a valid-format unrecorded token arbitrary exited 0 and wrote a nonempty extraction JSON; the record contained both production-leg iteration counts and custody metadata.",
+        "scripts/20_test_checks.py:1365-1380 tests only PENDING, NONE, DENY, and PLACEHOLDER, so its green group 47 does not exercise the arbitrary-token bypass.",
+        "reproduce: d=$(mktemp -d) && python3 scripts/27_extract_barriers.py --gate-token arbitrary --out \"$d/unauthorized.json\" && test -s \"$d/unauthorized.json\"",
+        "proposed_check: C-GATE-003 — require the extractor to dereference an authenticated ALLOW record bound to the audited commit and publish_claim; run fixtures for a valid authenticated token and a syntactically valid unrecorded token, requiring only the former to create an output record."
+      ]
+    }
+  ],
+  "verified_closed_findings": [],
+  "summary": "BLOCK: the new Q2 barrier extractor can materialize a result with an arbitrary valid-format token instead of a verified check_action ALLOW. No previous finding is currently open or requested for re-audit in cycle_context.json.",
+  "coverage": {
+    "evidence_manifest_sha256": "1945086881cf1d02019f2c1561479e02bf378a30a7bbae4085d9095a3c49e384",
+    "paths_examined": 14,
+    "method": "Read the canonical index and Q2 authorities first, then traced the new commit's extractor, its regression, paired inputs, custody records, and compressed raw outputs; executed the suite and an unauthorized-token probe only in an isolated clone.",
+    "not_examined": [
+      "Full line-by-line scientific recomputation of the unrelated Objective 2 MACE corpus and XRD sub-project",
+      "Remote controller consultation service or HPC state, which was not available and was not contacted"
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "cycle_id": "CYCLE-000027",
+  "files": {
+    "audit_report.md": {
+      "sha256": "a3637f60e7eba717792741061dbfe08f787a1a3f145e3b74995f476a62be2743"
+    },
+    "audit_result.json": {
+      "sha256": "faa9cf6b3f993a21d54c7b475b88cf8f91cad531d5bc326cca82496941b51c22"
+    },
+    "codex_run_metadata.json": {
+      "sha256": "6909570603e1df280c7b5b1a8abfc43780b7525fee510a2b752099de75673d10"
+    }
+  }
+}
