@@ -6,7 +6,7 @@ itself, not of the science it supervises: those live in the science repository's
 executor — because a record that only blamed one of them would be the less useful
 document.
 
-Period covered: 2026-07-30 to 2026-08-04, cycles CYCLE-000001 through CYCLE-000024.
+Period covered: 2026-07-30 to 2026-08-04, cycles CYCLE-000001 through CYCLE-000028.
 Cost over 2026-07-30..07-31 (I-001..I-008): 31.2M input tokens across 12 auditor runs.
 I-009 covers the 2026-08-03/04 dispatcher stall; cycle costs for that period are not
 aggregated here.
@@ -279,6 +279,66 @@ reason, recorded in `tick.sh.template`.
 symptom pointed at absence rather than denial — the more visible of two overlapping faults masked
 the load-bearing one. The lesson matching this file's own theme: an honest "not running" does not
 tell you whether the scheduler is absent or forbidden, and those need different fixes.
+## I-010 — The auditor could not start: `node` absent from cron's PATH
+
+*Found 2026-08-04 by the executor, read-only. Not edited: the trigger is operator infrastructure.*
+
+**Shape: infrastructure side**, like I-009, and it was hidden behind I-009 — fixing the TCC wall
+revealed it rather than caused it.
+
+**What works now.** The relocated trigger runs on schedule: `/opt/homebrew/var/audit-loop-bin/`
+`cron.log` shows passes every 15 minutes, and every executor fix commit is queued and deferring
+only on rate limit. Tier-0 also runs correctly — CYCLE-000028 (`dbd48cc4`) reports 12 checks,
+11 pass, 0 hard fail, 1 soft skip.
+
+**What does not.** The auditor process dies on launch:
+
+    state/cycles/CYCLE-000028/codex_run_0.log
+      --- STDERR ---
+      env: node: No such file or directory
+
+`out/` is empty and there was one attempt only, so the cycle sits at `CODEX_TASK_CREATED` /
+`NOT_STARTED` forever. `node` is installed — `/opt/homebrew/bin/node` — but cron hands its jobs
+a
+minimal PATH (typically `/usr/bin:/bin`), and `/opt/homebrew/bin` is not on it. Cycles 25–27 have
+populated `out/` directories, so this began with the cron relocation: the interpreter and trigger
+moved out of the TCC-protected directory, and the environment they inherit changed with them.
+
+**Fix (operator).** One line in the relocated trigger, before the `exec`:
+
+    export PATH=/opt/homebrew/bin:$PATH
+
+or an equivalent `PATH=` assignment in the crontab. The executor did not edit `tick.sh`: it is
+what spawns the auditor, and changing that is not the audited party's call.
+
+**Housekeeping.** The pre-relocation trigger path is still being invoked from somewhere — the
+Desktop-side `state/logs/cron.log` keeps accumulating `orchestrator/tick.sh: Operation not
+permitted`. Harmless, since the relocated trigger does the real work, but it makes the logs read
+as though the loop is still failing when it is not. Worth removing that stale entry.
+
+**Lesson, and it is the same one as I-009 one layer down.** I-009's fix was correct and necessary,
+and the loop still did not produce verdicts afterwards. A repair that removes *the* blocker is not
+the same as a repair that restores the function — the only evidence that the loop works is a
+cycle reaching `FINAL`, not a trigger that runs. This file's own framing applies: every local
+signal was honest (cron succeeded, Tier-0 passed, the status tool showed cycles advancing), and
+the system still delivered nothing.
+
+---
+
+
+### Addendum (operator, 2026-08-04): two binaries missing, not one
+
+The diagnosis named `node`, and it was right that node was the visible failure. But the fix
+needed two directories, not one: the `codex` CLI itself lives in `~/.local/bin`, also absent
+from cron's minimal PATH, so a PATH that restored only `/opt/homebrew/bin` would have moved the
+failure from "node not found" to "codex not found" on the next tick. `tick.sh` now exports
+`PATH=/opt/homebrew/bin:$HOME/.local/bin:$PATH` before exec. Verified by running the trigger
+under a stripped `env -i PATH=/usr/bin:/bin` environment — the same minimal PATH cron hands the
+job — and confirming the auditor launched.
+
+Same theme as I-009's addendum and the finding class the executor kept hitting: clearing the
+*named* obstruction is not the same as restoring function. The evidence that the loop works is a
+cycle reaching FINAL under the real trigger, not the trigger merely spawning.
 ## Open structural gap
 
 **The loop audits the repository. Nothing audits the executor's report about the
