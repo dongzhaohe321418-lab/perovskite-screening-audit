@@ -1,0 +1,21 @@
+{
+  "cycle_id": "CYCLE-000025",
+  "audited_commit": "7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88",
+  "decision": "PASS",
+  "findings": [],
+  "verified_closed_findings": [
+    {
+      "finding_id": "F-024",
+      "verification_summary": "At the fixed commit, expect() selects explicit success wording; isolated execution of the committed 46-group suite produced truthful group-41 and group-44 passing receipts and passed group 46's two committed fixtures. Altering only the disposable unmarked fixture to add a historical marker caused group 46 to fail, confirming the negative fixture is active. This independently verifies the prior CYCLE-000022 F-024 defect is repaired."
+    }
+  ],
+  "summary": "PASS: F-024 is independently verified closed; all Tier-0 HARD checks are PASS and no new defect was found in the re-audit scope.",
+  "coverage": {
+    "evidence_manifest_sha256": "01fbd569e55098ec6e2734a4eed25536b1bd007d5204c3b1420eccee1b994e89",
+    "paths_examined": 6,
+    "method": "Read the canonical navigation and the F-024 change surface (guard implementation, correction record, and both committed fixtures), then executed the fixed suite and a fixture-only negative control in an isolated detached copy.",
+    "not_examined": [
+      "No fresh independent numerical recomputation was performed outside the F-024 re-audit change surface; Tier-0 provided the deterministic whole-tree checks recorded in check_report.json."
+    ]
+  }
+}
