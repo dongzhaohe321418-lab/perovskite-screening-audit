@@ -6,7 +6,7 @@ what the gate permitted, and what each cycle cost. Generated; do not edit.
 
 | cycle | audited commit | decision | findings | disposition | closed here |
 |---|---|---|---|---|---|
-| [CYCLE-000008](cycles/CYCLE-000008.md) | `aaaaaaaaaaaa` | PASS | 0 | TASK_CREATED | 0 |
+| [CYCLE-000009](cycles/CYCLE-000009.md) | `cccccccccccc` | BLOCK | 1 | TASK_CREATED | 0 |
 
 ## Totals
 
