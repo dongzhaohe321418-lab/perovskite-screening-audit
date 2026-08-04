@@ -50,8 +50,18 @@ if pending and not running:
         age = o._age_hours(newest.get("updated_at", ""))
         if age >= 6:
             needs_pi.append(f"{newest['cycle_id']} has awaited a disposition for {age:.0f}h")
-if queued >= 5 and not running:
-    needs_pi.append(f"{queued} events queued with no audit running")
+# The dispatcher runs from cron every 5 minutes and is rate-limited to 4 audits an
+# hour, so a queue draining slowly is normal. Only a queue that has not moved across
+# two reviews (cycle count unchanged and nothing running) means the trigger itself
+# has stopped — that is what needs a human.
+cron_log = o.logs_dir / "cron.log"
+last_tick_age = None
+if cron_log.exists():
+    import os
+    last_tick_age = (dt.datetime.now().timestamp() - cron_log.stat().st_mtime) / 60
+if queued >= 5 and not running and last_tick_age is not None and last_tick_age > 20:
+    needs_pi.append(f"{queued} events queued and the cron trigger has been silent for "
+                    f"{last_tick_age:.0f} min — the dispatcher may be stopped")
 
 lines = [
     f"audit-loop review {dt.datetime.now(dt.timezone.utc).isoformat(timespec='seconds')}",

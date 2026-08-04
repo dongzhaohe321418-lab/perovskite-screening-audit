@@ -1526,9 +1526,12 @@ shasum -a 256 ./prompt_attempt<N>.txt    # N 为本次提示词文件的编号
         codex = self.cfg["codex"]["command"]
         add("codex CLI", bool(shutil.which(codex) or Path(codex).exists()), codex)
 
+        import subprocess as _sp
+        cron = _sp.run(["crontab", "-l"], capture_output=True, text=True).stdout
+        tick = "orchestrator/tick.sh" in cron
         agents = list((Path.home() / "Library/LaunchAgents").glob("*audit-loop.plist"))
-        add("launchd agent", bool(agents),
-            agents[0].name if agents else "not installed (manual/cron runs still work)")
+        add("trigger", tick or bool(agents),
+            "cron */5" if tick else (agents[0].name if agents else "none installed"))
 
         mcp_cfg = Path.home() / ".claude-science/mcp/local-mcp.json"
         registered = False
