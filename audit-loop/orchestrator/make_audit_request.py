@@ -122,6 +122,31 @@ def main() -> int:
         cwd=repo, check=True, capture_output=True,
     )
     new_head = sh(["git", "rev-parse", "HEAD"], repo).strip()
+
+    # ---- POST-COMMIT VERIFICATION (audit F-027) -------------------------------------
+    # The digest above is taken at `head`, then .audit is committed on top -- so the
+    # COMMITTED manifest describes its own parent tree, not the commit that carries it.
+    # For the non-.audit evidence tree those are identical (the commit touches .audit
+    # only), and that is what makes the binding valid. But if anything outside .audit
+    # differs, the manifest does not identify the tree the gate binds to. Verify against
+    # the committed objects rather than assume, and refuse to leave a bad binding behind.
+    ls = subprocess.run(["git", "ls-tree", "-r", "-z", "--name-only", new_head],
+                        cwd=repo, capture_output=True, check=True).stdout
+    committed = sorted(q for q in ls.split(b"\0") if q and not q.startswith(b".audit/"))
+    vstream = b""
+    for q in committed:
+        blob = subprocess.run(["git", "show", f"{new_head}:{q.decode()}"],
+                              cwd=repo, capture_output=True, check=True).stdout
+        vstream += hashlib.sha256(blob).hexdigest().encode() + b"  " + q + b"\n"
+    verified = hashlib.sha256(vstream).hexdigest()
+    if verified != tree_sha256:
+        print(f"FATAL: committed manifest tree_sha256 {tree_sha256[:12]} does not describe the "
+              f"tree at {new_head[:12]} (recomputed {verified[:12]}). The evidence binding would "
+              f"be invalid -- audit F-027. Files outside .audit changed between digest and "
+              f"commit; re-run so the digest is taken from a clean tree.", file=sys.stderr)
+        return 3
+    print(f"manifest verified against committed tree {new_head[:12]}: {verified[:12]}",
+          file=sys.stderr)
     print(new_head)
     return 0
 
