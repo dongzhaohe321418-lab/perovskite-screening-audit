@@ -1,0 +1,35 @@
+{
+  "cycle_id": "CYCLE-000024",
+  "audited_commit": "485106fa144ccd74fff77144634b65e15c38eb71",
+  "decision": "BLOCK",
+  "findings": [
+    {
+      "finding_id": "F-024",
+      "title": "Regression guard receipts state failure propositions after passing",
+      "severity": "HIGH",
+      "status": "OPEN",
+      "blocked_scopes": [
+        "publish_claim"
+      ],
+      "evidence": [
+        "cite: §10 / R-GRD-001",
+        "source: JUDGMENT",
+        "finding_class: HARD",
+        "The submitted repair commit 7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88 is not an ancestor of the audited commit, which retains scripts/20_test_checks.py:19-24: expect() prints the same msg on both the pass and failure branches.",
+        "An isolated-clone run exits 0 but group [41] prints `ok AUDIT_CORRECTIONS_CYCLE1.md:101 count 36 != current 45 and is not marked historical`, despite AUDIT_CORRECTIONS_CYCLE1.md:98 explicitly marking that record historical. Group [44] also prints `ok ... current entry missing on disk` after successful path-existence predicates.",
+        "reproduce: python3 scripts/20_test_checks.py | sed -n '/\\[41\\]/,/\\[42\\]/p;/\\[44\\]/,/\\[45\\]/p'; nl -ba scripts/20_test_checks.py | sed -n '19,25p;1129,1155p;1247,1268p'; nl -ba AUDIT_CORRECTIONS_CYCLE1.md | sed -n '96,107p'; git merge-base --is-ancestor 7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88 HEAD; printf 'repair_ancestor_rc=%s\\n' \"$?\"",
+        "proposed_check: C-GUARD-003 — execute accepted and rejected committed fixtures for the count and staging receipt scanners; require accepted fixtures to emit satisfied-condition wording and rejected fixtures to emit violation wording, and AST-reject any violation-shaped expect() call without an explicit success message."
+      ]
+    }
+  ],
+  "verified_closed_findings": [],
+  "summary": "BLOCK: F-024 remains open because the audited commit predates its submitted repair and its passing regression receipts still assert failure propositions. Tier-0 HARD checks are PASS; the blocker is independently demonstrated judgment evidence.",
+  "coverage": {
+    "evidence_manifest_sha256": "01fbd569e55098ec6e2734a4eed25536b1bd007d5204c3b1420eccee1b994e89",
+    "paths_examined": 31,
+    "method": "Read navigation, canonical-index, authority, protocol, manifest, raw-output, derivation, XRD, and regression artifacts selected by RESULTS_INDEX and prior open finding F-024; independently executed the regression suite and three key recomputations in an isolated detached clone.",
+    "not_examined": [
+      "Full manual semantic review of all 482 tracked paths, including historical archive material and every individual raw XRD scan, was not performed; Tier-0 supplied tree-wide deterministic checks."
+    ]
+  }
+}
