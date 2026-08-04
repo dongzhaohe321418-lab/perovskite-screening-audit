@@ -1,0 +1,16 @@
+{
+  "cycle_id": "CYCLE-000026",
+  "audited_commit": "735e7f008da7ad3a2a37dd3536172e9f4e1fea3d",
+  "decision": "PASS",
+  "findings": [],
+  "summary": "PASS at the fixed snapshot: Tier-0 has no failures or HARD skips/errors, and isolated execution independently verified the 46-group regression suite, Q3 derivation, evidence-manifest hash, and the F-022/F-023/F-024 regression guards. No previously inactive finding is asserted closed in this cycle.",
+  "coverage": {
+    "evidence_manifest_sha256": "1945086881cf1d02019f2c1561479e02bf378a30a7bbae4085d9095a3c49e384",
+    "paths_examined": 64,
+    "method": "Read the canonical index, current Objective 1 authorities, changed audit artifacts, staging and XRD authorities, manifests, derivation and regression code, then executed the isolated-clone regression and derivation paths over their committed fixtures and raw records.",
+    "not_examined": [
+      "No external remote/HPC, instrument, or uncommitted-worktree state was inspected.",
+      "No scientific-merit assessment beyond committed-record traceability and internal consistency was performed."
+    ]
+  }
+}
