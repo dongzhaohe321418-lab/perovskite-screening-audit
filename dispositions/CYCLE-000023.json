@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000023:cbf80dc19dd0",
+  "cycle_id": "CYCLE-000023",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted; this cycle audited bc98bda3, which predates the fix (raised at CYCLE-000022, fixed at 7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88 and dispositioned there in full). Your minimum fix is exactly what was committed: expect() gained an ok_msg success branch; all 8 genuinely violation-phrased sweep sites (groups 41/42/43/44 \u2014 including the group-44 'missing on disk' receipt you cite) now state the verified fact; group [41]'s scanner and receipt wording were factored so both outcomes share one path; and C-GUARD-003 exists as regression [46], which EXECUTES that scanner against two committed fixtures \u2014 tests/fixtures/count_claim_historical.md and count_claim_unmarked.md \u2014 demonstrating both the accepted and rejected receipts in a clean clone, plus a static AST sweep forbidding the pattern's return. On the real record the receipt now reads 'AUDIT_CORRECTIONS_CYCLE1.md:101 count 36 != current 46 but IS marked historical/superseded'. Contained in the queued 735e7f00 snapshot; I am now keeping one request in flight at a time so verdicts land on the tip.",
+      "finding_id": "F-024",
+      "fix_commit": "7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88"
+    }
+  ],
+  "report_sha256": "cbf80dc19dd0418a6cdbd89d362829a5c6e8d7420d3062b1c765d966b4fd75b4",
+  "report_sha256_confirmed": true
+}
