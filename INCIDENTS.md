@@ -6,14 +6,17 @@ itself, not of the science it supervises: those live in the science repository's
 executor — because a record that only blamed one of them would be the less useful
 document.
 
-Period covered: 2026-07-30 to 2026-07-31, cycles CYCLE-000001 through CYCLE-000008.
-Cost over that period: 31.2M input tokens across 12 auditor runs.
+Period covered: 2026-07-30 to 2026-08-04, cycles CYCLE-000001 through CYCLE-000024.
+Cost over 2026-07-30..07-31 (I-001..I-008): 31.2M input tokens across 12 auditor runs.
+I-009 covers the 2026-08-03/04 dispatcher stall; cycle costs for that period are not
+aggregated here.
 
 ---
 
 ## The pattern, stated once
 
-Every incident below is one of two shapes.
+Every incident below is one of three shapes. The first two account for I-001..I-008 and
+were the whole of this file until 2026-08-04; the third arrived with I-009.
 
 **Controller side — a rule that contradicted the constitution it implements.** Three
 of the four controller defects were rules written to be strict, which turned out to
@@ -27,6 +30,14 @@ audit loop cannot catch this class, because it audits the repository, not the
 executor's account of the repository. See "Open structural gap" at the end.
 
 ---
+
+**Infrastructure side — every component reporting correctly while the system as a whole
+stops.** I-009 is the first of these. No rule over-forbade and nothing was misreported:
+the status tool truthfully showed a growing queue, the health review truthfully said no
+auditor was running, and the executor truthfully reported the stall. The scheduler was
+simply absent. This shape is harder to catch than the other two precisely because every
+local signal is honest — it is only visible by asking why a *correct* report describes a
+system that is not moving.
 
 ## I-001 — The gate blocked the work that clears the gate
 
@@ -176,6 +187,69 @@ cycle identity is idempotent on `(commit, trigger, evidence hash)`, so the same 
 cannot be re-audited in place. Writing the intention in a report is not the call.
 
 Same shape as I-006 and I-007: an action believed done, never read back.
+
+---
+
+## I-009 — The dispatcher stopped because its launchd agent was never installed
+
+*Period: 2026-08-03T07:52 UTC onwards. Diagnosed 2026-08-04 by the executor via read-only
+inspection; nothing was loaded, started, or stopped.*
+
+**Shape: infrastructure side** (the third shape, added to the pattern section above for this
+incident) — not a controller rule that over-forbade, and not the executor reporting intent as
+fact. It is the supervision system's *scheduler* being absent while every component that
+depends on it reported its own state correctly. `audit_status` truthfully showed a growing
+spool; the health review truthfully said `codex running: no`; the executor truthfully reported
+the queue was not draining. Nothing lied, and the loop still stopped.
+
+**Symptom.** `spool` grew to 14 queued events while `Cycles:` stayed at 24. Findings could not be
+verified closed, so every `check_action` depending on a FINAL audit at HEAD kept returning
+`NO_FINAL_AUDIT_FOR_COMMIT` — which in turn blocked the Q2 barrier extraction, the FNV `pp.x`
+step, and even an energy-free structural extraction.
+
+**Root cause.** `launchd/com.ericdong.audit-loop.plist` exists in this directory and declares
+`StartInterval 900` with `RunAtLoad`, but the agent is **installed in no launchd directory at
+all**: zero matching entries in `~/Library/LaunchAgents`, `/Library/LaunchAgents`, and
+`/Library/LaunchDaemons`. A 15-minute interval cannot fire while the agent is unloaded.
+
+The timestamps corroborate rather than merely suggest this. `state/logs/launchd.out.log` has no
+entry after 2026-08-03T07:52 UTC, yet `state/orchestrator.lock` was touched at 2026-08-04T01:30
+UTC, one minute before CYCLE-000024 was created at 01:31:02. So the orchestrator *is* runnable and
+did run once — but not through launchd, because a launchd invocation appends to that log. That run
+was a one-off, not the interval.
+
+**What was ruled out, and how.**
+
+* *Stale lock.* `state/orchestrator.lock` is 0 bytes with mtime at the last successful run — a
+  flock sentinel, not a held mutex. CYCLE-000024 completed with it present.
+* *Escalation pause.* The dispatcher correctly defers while escalations await the PI
+  (`auto re-audit is paused until acknowledge_escalation`). That genuinely did stall the queue on
+  2026-08-03 — the log shows deferrals naming ESC-0005/0006 — and it is a *feature*. But all 7
+  escalations are now ACKNOWLEDGED with `Escalations: 0 OPEN`, so it is no longer the cause.
+* *Rate limit.* The `deferred (rate limit)` lines appear only alongside the escalation-pause
+  message; with no open escalations there is nothing to defer behind.
+
+**Fix — operator action, deliberately not performed by the executor.** Loading a launchd agent
+installs a persistent background job that spawns an external auditor and spends budget on every
+pass. That is not the executor's call to make on the operator's machine, so the entry stops at
+the command:
+
+    launchctl bootstrap gui/$(id -u) \
+      /Users/ericdong/Desktop/perovskite-project/audit-loop/launchd/com.ericdong.audit-loop.plist
+    launchctl kickstart -p gui/$(id -u)/com.ericdong.audit-loop   # optional: one pass now
+
+Confirm with `launchctl print gui/$(id -u)/com.ericdong.audit-loop | head`, then check that
+`launchd.out.log` gains entries and `Cycles:` advances.
+
+**A second, independent defect found in the same inspection.** `request_audit` *via the MCP
+server* fails with `cannot run make_audit_request.py: [Errno 1] Operation not permitted:
+'.../audit-loop/.venv/bin/python'`. That path is a symlink chain ending at
+`/Users/ericdong/miniconda3/envs/matsci/bin/python3`, which the MCP server's execution context
+cannot invoke. The workaround in use is to run `orchestrator/make_audit_request.py` directly under
+a working interpreter; this produces an identical request, and since the F-018 generator patch the
+manifest's raw-byte digest equals the recorded `evidence_manifest_sha256` automatically (verified
+at each of the last three requests). Worth noting because the MCP path is the *documented* one, so
+a future session that trusts the error message would conclude the loop is unusable.
 
 ---
 

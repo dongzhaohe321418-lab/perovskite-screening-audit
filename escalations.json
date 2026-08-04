@@ -89,6 +89,21 @@
       "reason": "unresolved across 3 audit cycles",
       "resolution_note": "Both escalations are the SAME defect counted three times because the audit queue was running behind my fix rate, not three failures to fix. F-022/F-023 were raised at CYCLE-000020 (snapshot a01e54cf), fixed at bc98bda3 within the hour, then re-raised at CYCLE-000021 (snapshot 1cca3f64) and CYCLE-000022 (snapshot 54861ef2) \u2014 both queued BEFORE the fix existed, and each report itself states the fix commit is not an ancestor of the snapshot it audited. Fix content: q1 staging manifest superseded to SUBMITTED_AND_COMPLETED with v1 preserved verbatim and the q1==q0 hash identity explained by the zero-BFGS-step physics; canonical index gained the QX passivator-screen row; regressions [44]/[45] pin both with verified failing fixtures. Contained in the queued 735e7f00 snapshot. Operational note for the loop: I will keep one audit request in flight at a time from here on, so verdicts land on the tip rather than on superseded snapshots. Not claiming closure \u2014 the verdict is the auditor's.",
       "status": "ACKNOWLEDGED"
+    },
+    {
+      "acknowledged_at": "2026-08-04T01:36:07.292661+00:00",
+      "acknowledged_by": "mcp",
+      "cycle_ids": [
+        "CYCLE-000022",
+        "CYCLE-000023",
+        "CYCLE-000024"
+      ],
+      "escalation_id": "ESC-0007",
+      "finding_id": "F-024",
+      "opened_at": "2026-08-04T01:31:08.086602+00:00",
+      "reason": "unresolved across 3 audit cycles",
+      "resolution_note": "Same defect counted three times because the queue is running behind the fix rate, not three failures to fix. F-024 was raised at CYCLE-000022 (snapshot 54861ef2), fixed at 7a4f3b0e within the hour, then re-raised at CYCLE-000023 (bc98bda3) and CYCLE-000024 (485106fa) \u2014 both snapshots predate the fix, and each report states so itself. Fix content: expect() gained an ok_msg success branch; 8 violation-phrased sweep sites now state the verified fact; C-GUARD-003 (regression [46]) drives group [41]'s scanner from two committed fixtures and statically forbids the pattern returning. Clean-clone rerun at descendant 21cf7f6c: 48 groups exit 0, and [41] now emits 'count 36 != current 48 but IS marked historical/superseded'. The next queued snapshot (735e7f00) is the FIRST that contains the fix, so that cycle can render the closure verdict. Not claiming closure \u2014 that is the auditor's to give. No barrier extracted; publish_claim un-retried since its DENY.",
+      "status": "ACKNOWLEDGED"
     }
   ]
 }

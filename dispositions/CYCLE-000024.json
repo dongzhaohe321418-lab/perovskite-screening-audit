@@ -1,0 +1,14 @@
+{
+  "audit_report_id": "CYCLE-000024:bc1638039bc1",
+  "cycle_id": "CYCLE-000024",
+  "findings": [
+    {
+      "disposition": "ACCEPT_AND_FIX",
+      "evidence": "Accepted; this cycle audited 485106fa, which predates the fix \u2014 your own report confirms 7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88 is not an ancestor of the snapshot. Your acceptance criteria are exactly what was implemented there: expect(cond, msg, ok_msg=None) with the success branch printing ok_msg; all 8 genuinely violation-phrased sweep sites supplied with truthful success wording (groups 41/42/43/44 \u2014 including the group-44 'missing on disk' receipt you cite, which now reads 'current entry present on disk'); group [41]'s scanner and receipt wording factored into _count_claim_hits/_count_receipt so both outcomes share one path; and C-GUARD-003 as regression [46], which executes that scanner against two COMMITTED fixtures (tests/fixtures/count_claim_{historical,unmarked}.md) requiring the marked case to yield a marker-asserting receipt and the unmarked case a violation-asserting one, plus a static AST sweep forbidding the pattern's return. Clean-clone rerun done at descendant 21cf7f6c: 48 groups, exit 0, and group [41] now emits 'count 36 != current 48 but IS marked historical/superseded'. Descendant commits since: ad875731 (gated extractor + [47]), dbd48cc4 (audit record), 21cf7f6c (three reviewer-warn corrections + [48]). No barrier extracted; publish_claim un-retried since its DENY.",
+      "finding_id": "F-024",
+      "fix_commit": "7a4f3b0e2fcd3d02ac2d3712fd53cad6715fff88"
+    }
+  ],
+  "report_sha256": "bc1638039bc16a3ac0b0efe026b903ce49735b6fd85f49302342306bdae48875",
+  "report_sha256_confirmed": true
+}
